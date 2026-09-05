@@ -1,0 +1,5 @@
+# Fase 0 — so o esqueleto HTTP. LangGraph, Gemini SDK e o indice vetorial
+# entram nos cards da Fase 2, nao aqui.
+fastapi~=0.115.0
+uvicorn[standard]~=0.34.0
+python-dotenv~=1.0.0

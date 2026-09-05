@@ -1,0 +1,22 @@
+# Fragmento do solar-ai: o agente da Lia, sozinho.
+#
+# Roda sozinho -- `docker compose up` aqui sobe so o agente, que e tudo de que
+# ele precisa: por decisao de arquitetura ele e stateless e nunca acessa o
+# banco. E o que o pipeline de CI/CD deste repositorio (S-28) vai usar.
+#
+# O ambiente completo dos tres servicos e montado pelo solar-ai-docs, que
+# inclui este arquivo. Sem `name:` de proposito: assim o projeto Compose e o de
+# quem inclui, e os servicos entram todos na mesma rede.
+
+services:
+  agente:
+    build:
+      # Relativo a ESTE arquivo, mesmo quando incluido de outro repo.
+      context: .
+    env_file:
+      # A chave da Gemini mora no .env deste repo e nunca e copiada para dentro
+      # da imagem -- esta no .dockerignore.
+      - path: .env
+        required: false
+    ports:
+      - "8000:8000"
