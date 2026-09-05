@@ -1,0 +1,12 @@
+# Segredos — nunca commitar
+.env
+.env.*
+!.env.example
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
