@@ -18,5 +18,8 @@ services:
       # da imagem -- esta no .dockerignore.
       - path: .env
         required: false
+    environment:
+      SOLAR_ENV: development
+      SOLAR_VERSION: ${SOLAR_VERSION:-dev}
     ports:
       - "8000:8000"
