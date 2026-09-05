@@ -14,6 +14,8 @@ from typing import Literal
 from fastapi import FastAPI, Response
 from pydantic import BaseModel
 
+from app.contrato import CamposExtraidos, TurnoRequest, TurnoResponse
+
 SERVICO = "solar-ai"
 ESSENCIAIS = frozenset({"gemini_config"})
 
@@ -110,4 +112,16 @@ def health(response: Response) -> HealthResponse:
         status=status,
         version=_versao(),
         checks=checks,
+    )
+
+
+@app.post("/turn", response_model=TurnoResponse)
+def turn(requisicao: TurnoRequest) -> TurnoResponse:
+    """Processa um turno de conversa. Eco ate o grafo da Lia entrar no S-06."""
+    return TurnoResponse(
+        resposta=f"Eco: {requisicao.mensagem}",
+        intencao=requisicao.perfil_lead.intencao or "indefinida",
+        campos_extraidos=CamposExtraidos(),
+        proxima_acao="continuar_conversa",
+        imoveis_sugeridos=[],
     )
