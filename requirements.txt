@@ -1,5 +1,9 @@
-# Fase 0 — so o esqueleto HTTP. LangGraph, Gemini SDK e o indice vetorial
-# entram nos cards da Fase 2, nao aqui.
+# Esqueleto HTTP. O indice vetorial entra na Fase 2, nao aqui.
 fastapi~=0.115.0
 uvicorn[standard]~=0.34.0
 python-dotenv~=1.0.0
+
+# Grafo da Lia (S-06). Versao exata, nao ~=.
+langgraph==1.2.11
+langchain-core==1.6.2
+langchain-google-genai==4.4.0

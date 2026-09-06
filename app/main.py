@@ -11,10 +11,11 @@ import os
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
-from app.contrato import CamposExtraidos, TurnoRequest, TurnoResponse
+from app.contrato import TurnoRequest, TurnoResponse
+from app.lia import LiaIndisponivelError, responder
 
 SERVICO = "solar-ai"
 ESSENCIAIS = frozenset({"gemini_config"})
@@ -115,13 +116,23 @@ def health(response: Response) -> HealthResponse:
     )
 
 
-@app.post("/turn", response_model=TurnoResponse)
+@app.post(
+    "/turn",
+    response_model=TurnoResponse,
+    responses={503: {"description": "a Lia nao conseguiu responder este turno"}},
+)
 def turn(requisicao: TurnoRequest) -> TurnoResponse:
-    """Processa um turno de conversa. Eco ate o grafo da Lia entrar no S-06."""
-    return TurnoResponse(
-        resposta=f"Eco: {requisicao.mensagem}",
-        intencao=requisicao.perfil_lead.intencao or "indefinida",
-        campos_extraidos=CamposExtraidos(),
-        proxima_acao="continuar_conversa",
-        imoveis_sugeridos=[],
-    )
+    """Processa um turno de conversa pelo grafo da Lia."""
+    try:
+        return responder(requisicao)
+    except LiaIndisponivelError as erro:
+        logger.error(
+            "Turno da conversa %s falhou (cota=%s): %s",
+            requisicao.conversa_id,
+            erro.cota,
+            erro,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=_motivo(str(erro)) or "a Lia nao conseguiu responder este turno",
+        ) from erro

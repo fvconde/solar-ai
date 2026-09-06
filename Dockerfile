@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ app/
 COPY data/ data/
+COPY prompts/ prompts/
 
 # Logs sem buffer, senao o print/log so aparece quando o container morre.
 ENV PYTHONUNBUFFERED=1

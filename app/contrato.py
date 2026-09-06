@@ -17,14 +17,15 @@ Urgencia = Literal["alta", "media", "baixa"]
 ProximaAcao = Literal[
     "continuar_conversa",
     "sugerir_imoveis",
-    "agendar_visita",
+    "agendar_reuniao",
+    "direcionar_especialista",
     "encerrar",
-    "escalar_humano",
 ]
 
 LIMITE_MENSAGEM = 4000
 LIMITE_HISTORICO = 50
 LIMITE_IMOVEIS = 5
+LIMITE_EXPECTATIVA = 200
 
 
 class _Contrato(BaseModel):
@@ -47,6 +48,7 @@ class PerfilLead(_Contrato):
     quartos: int | None = None
     regiao: str | None = None
     urgencia: Urgencia | None = None
+    expectativa_retorno: str | None = Field(default=None, max_length=LIMITE_EXPECTATIVA)
     score: int | None = Field(default=None, ge=0, le=100)
 
 
@@ -59,6 +61,7 @@ class CamposExtraidos(_Contrato):
     quartos: int | None = None
     regiao: str | None = None
     urgencia: Urgencia | None = None
+    expectativa_retorno: str | None = Field(default=None, max_length=LIMITE_EXPECTATIVA)
     score: int | None = Field(default=None, ge=0, le=100)
 
 
