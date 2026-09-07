@@ -8,7 +8,7 @@ Modelo: `gemini-3.5-flash-lite`
 
 **Lead:** to procurando imovel pra investir e alugar depois
 
-**Lia:** Para investimento, o foco é a rentabilidade. Quanto você pretende aplicar e qual retorno espera ter com o aluguel?
+**Lia:** Entendi, focar em rentabilidade é um ótimo caminho. Quanto você espera de retorno com esse imóvel?
 
 - intencao: `investimento` · proximaAcao: `continuar_conversa`
 - extraiu: `{"score": 30}`
@@ -18,7 +18,7 @@ Modelo: `gemini-3.5-flash-lite`
 
 **Lead:** qual regiao ta rendendo mais aluguel hoje?
 
-**Lia:** As regiões centrais e próximas a universidades costumam ter uma procura constante por aluguel. Para eu te indicar os melhores pontos, quanto você pretende aplicar?
+**Lia:** As regiões centrais e próximas a universidades costumam ter uma procura forte por locação. Para eu afunilar as opções, quanto você tem disponível para investir?
 
 - intencao: `investimento` · proximaAcao: `continuar_conversa`
 - extraiu: `{"score": 35}`
@@ -28,7 +28,7 @@ Modelo: `gemini-3.5-flash-lite`
 
 **Lead:** entendi. tenho ate 400 mil pra aplicar
 
-**Lia:** Com esse valor dá para encontrar opções bem interessantes. E qual retorno você espera ter com o aluguel?
+**Lia:** Com esse valor dá para encontrar boas opções com liquidez rápida. Qual faixa de retorno mensal você espera obter com o aluguel?
 
 - intencao: `investimento` · proximaAcao: `continuar_conversa`
 - extraiu: `{"precoMax": 400000, "score": 50}`
@@ -38,9 +38,9 @@ Modelo: `gemini-3.5-flash-lite`
 
 **Lead:** espero uns 0,7% ao mes de aluguel liquido
 
-**Lia:** Entendido. Vou separar as melhores opções para esse perfil de rentabilidade e um especialista vai entrar em contato com você.
+**Lia:** Uma expectativa bem realista para o mercado atual. Vou separar os imóveis que entregam esse perfil de renda para você conversar com o nosso especialista em investimentos.
 
 - intencao: `investimento` · proximaAcao: `direcionar_especialista`
-- extraiu: `{"expectativaRetorno": "0,7% ao mes de aluguel liquido", "score": 85}`
-- perfil apos o turno: `{"intencao": "investimento", "score": 85, "precoMax": 400000, "expectativaRetorno": "0,7% ao mes de aluguel liquido"}`
+- extraiu: `{"expectativaRetorno": "0,7% ao mes de aluguel liquido", "score": 90}`
+- perfil apos o turno: `{"intencao": "investimento", "score": 90, "precoMax": 400000, "expectativaRetorno": "0,7% ao mes de aluguel liquido"}`
 

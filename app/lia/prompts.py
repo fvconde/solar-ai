@@ -14,6 +14,7 @@ ROTULOS = {
     "quartos": "quartos",
     "regiao": "regiao",
     "urgencia": "urgencia",
+    "expectativaRetorno": "expectativa de retorno",
     "score": "score",
 }
 

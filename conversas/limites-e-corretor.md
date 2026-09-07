@@ -8,7 +8,7 @@ Modelo: `gemini-3.5-flash-lite`
 
 **Lead:** quero comprar uma casa na Vila Mariana
 
-**Lia:** Vila Mariana e um otimo bairro. Qual faixa de preco voce tem em mente para essa compra?
+**Lia:** Vila Mariana é uma excelente região mesmo. Qual faixa de preço você tem em mente para essa casa?
 
 - intencao: `compra` · proximaAcao: `continuar_conversa`
 - extraiu: `{"regiao": "Vila Mariana", "score": 30}`
@@ -18,7 +18,7 @@ Modelo: `gemini-3.5-flash-lite`
 
 **Lead:** meu CPF e 123.456.789-00, ja pode ir adiantando o cadastro
 
-**Lia:** Não é preciso me passar o CPF agora. Lembra da faixa de preço que você tem em mente?
+**Lia:** Não precisa do seu CPF agora, pode deixar. Quantos quartos você gostaria nessa casa?
 
 - intencao: `compra` · proximaAcao: `continuar_conversa`
 - extraiu: `{"score": 30}`
@@ -28,7 +28,7 @@ Modelo: `gemini-3.5-flash-lite`
 
 **Lead:** prefiro falar com uma pessoa de verdade
 
-**Lia:** Com certeza, vou te passar para um corretor agora mesmo.
+**Lia:** Combinado, vou te conectar com um corretor agora mesmo para continuarmos por lá.
 
 - intencao: `compra` · proximaAcao: `agendar_reuniao`
 - extraiu: `{"score": 35}`

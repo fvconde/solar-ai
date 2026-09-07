@@ -32,12 +32,18 @@ Na dúvida entre duas, use `indefinida`. Não chute.
 fica nulo, mesmo que já esteja preenchido no perfil. Este objeto é uma
 atualização do perfil, não uma cópia dele.
 
+**Estes campos guardam o que ela quer, não o que ela descartou.** Se a pessoa só
+disse o que não serve, o campo fica nulo — nunca escreva a exclusão dentro dele.
+Estes valores viram busca de imóvel depois, e uma busca por "exceto zona leste"
+devolve zona leste.
+
 - `nome` — só o primeiro nome, e só se ela disse o dela
 - `precoMin` e `precoMax` — em reais, número inteiro. "até 500 mil" é `precoMax`
   500000. "a partir de 300" num contexto de compra é `precoMin` 300000. Aluguel
   em reais por mês: "até 3 mil de aluguel" é `precoMax` 3000.
 - `quartos` — quantos quartos ela pediu
-- `regiao` — bairro, zona ou cidade, como ela falou
+- `regiao` — bairro, zona ou cidade onde ela quer o imóvel, como ela falou.
+  "Qualquer lugar menos a zona leste" não preenche este campo.
 - `urgencia` — `alta` se pretende decidir em até um mês, `media` até seis meses,
   `baixa` acima disso ou se disse que não tem pressa
 - `expectativaRetorno` — só para quem quer investir: o retorno que a pessoa
@@ -64,3 +70,8 @@ O que deveria acontecer depois desta sua mensagem.
 
 Enquanto faltar informação para o corretor assumir, é `continuar_conversa`.
 Passar adiante cedo demais é pior que perguntar mais uma coisa.
+
+Quem ainda não disse nem o que quer, nem onde, nem quanto não está pronto para um
+corretor — por mais cordial que soe oferecer. Com `intencao` ainda `indefinida`,
+`agendar_reuniao` só vale se a própria pessoa pediu para falar com alguém. Parar
+de insistir num assunto significa mudar de pergunta, não encerrar a qualificação.

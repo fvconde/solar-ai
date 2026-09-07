@@ -1,5 +1,5 @@
 """
-Conversas de exemplo da Lia — card S-06 do Solar.
+Conversas de exemplo da Lia — cards S-06 e S-11 do Solar.
 
 Roda roteiros fixos de lead contra o grafo e grava a transcricao em conversas/.
 As mensagens do lead sao sempre as mesmas, entao `git diff conversas/` depois de
@@ -9,11 +9,11 @@ Os leads sao ficticios. Nenhum dado real entra aqui: o free tier da Gemini usa o
 conteudo enviado para treino, e a camada de mascaramento so chega no S-34.
 
 Uso:
-    python scripts/conversas_exemplo.py            # roda as 5
+    python scripts/conversas_exemplo.py            # roda as 6
     python scripts/conversas_exemplo.py --so 3     # roda so a 3
     python scripts/conversas_exemplo.py --listar   # nomes, sem gastar cota
 
-Cada rodada completa custa cerca de 20 chamadas ao Gemini. Ha uma pausa de 5 s entre
+Cada rodada completa custa cerca de 24 chamadas ao Gemini. Ha uma pausa de 5 s entre
 chamadas porque o free tier limita tambem por minuto (4 s dava 15/min, que e o
 proprio teto, e o outlier voltava): em rajada, o SDK entra em
 backoff e um turno normal de 2 s aparece como 30 s.
@@ -74,6 +74,16 @@ ROTEIROS: list[dict] = [
             "qual regiao ta rendendo mais aluguel hoje?",
             "entendi. tenho ate 400 mil pra aplicar",
             "espero uns 0,7% ao mes de aluguel liquido",
+        ],
+    },
+    {
+        "nome": "retomada-follow-up",
+        "resumo": "Exemplo 3 do enunciado: o lead esfria, some e volta. Testa se a Lia retoma sem re-perguntar.",
+        "mensagens": [
+            "quero comprar um apto de 2 quartos no Tatuape, ate 500 mil",
+            "ainda nao sei quando, vou pensar melhor",
+            "oi, voltei. ainda tem alguma coisa naquela faixa?",
+            "consigo ver essa semana",
         ],
     },
     {
@@ -179,7 +189,7 @@ def _rodar(roteiro: dict) -> tuple[str, list[float]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Conversas de exemplo da Lia (S-06).")
-    parser.add_argument("--so", type=int, metavar="N", help="roda so o roteiro N (1 a 5)")
+    parser.add_argument("--so", type=int, metavar="N", help="roda so o roteiro N (1 a 6)")
     parser.add_argument("--listar", action="store_true", help="lista os roteiros e sai")
     args = parser.parse_args()
 

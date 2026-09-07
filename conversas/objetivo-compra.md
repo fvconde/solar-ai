@@ -8,11 +8,11 @@ Modelo: `gemini-3.5-flash-lite`
 
 **Lead:** boa tarde, procuro apartamento pra comprar
 
-**Lia:** Boa tarde. Para qual região você está olhando?
+**Lia:** Boa tarde. Qual região você tem interesse?
 
 - intencao: `compra` · proximaAcao: `continuar_conversa`
-- extraiu: `{"score": 20}`
-- perfil apos o turno: `{"intencao": "compra", "score": 20}`
+- extraiu: `{"score": 30}`
+- perfil apos o turno: `{"intencao": "compra", "score": 30}`
 
 ## Turno 2
 
@@ -21,26 +21,26 @@ Modelo: `gemini-3.5-flash-lite`
 **Lia:** Entendi, Butantã e arredores até esse valor. Quantos quartos você precisa?
 
 - intencao: `compra` · proximaAcao: `continuar_conversa`
-- extraiu: `{"precoMax": 650000, "regiao": "Butanta", "score": 40}`
-- perfil apos o turno: `{"intencao": "compra", "score": 40, "precoMax": 650000, "regiao": "Butanta"}`
+- extraiu: `{"precoMax": 650000, "regiao": "Butanta", "score": 50}`
+- perfil apos o turno: `{"intencao": "compra", "score": 50, "precoMax": 650000, "regiao": "Butanta"}`
 
 ## Turno 3
 
 **Lead:** 3 quartos, e preciso mudar ate o fim do ano
 
-**Lia:** Prazo anotado, até o fim do ano. Qual é o seu nome?
+**Lia:** Entendi, três quartos e mudança até o fim do ano. Me diz seu nome, por favor?
 
 - intencao: `compra` · proximaAcao: `continuar_conversa`
-- extraiu: `{"quartos": 3, "urgencia": "alta", "score": 75}`
-- perfil apos o turno: `{"intencao": "compra", "score": 75, "precoMax": 650000, "regiao": "Butanta", "quartos": 3, "urgencia": "alta"}`
+- extraiu: `{"quartos": 3, "urgencia": "media", "score": 75}`
+- perfil apos o turno: `{"intencao": "compra", "score": 75, "precoMax": 650000, "regiao": "Butanta", "quartos": 3, "urgencia": "media"}`
 
 ## Turno 4
 
 **Lead:** sou o Rafael. da pra marcar uma visita essa semana?
 
-**Lia:** Com certeza, Rafael. Vou passar suas informações para um corretor e ele entra em contato para agendar a visita.
+**Lia:** Prazer, Rafael. Vou separar as melhores opções no Butantã e peço para um corretor entrar em contato para agendarmos a visita.
 
 - intencao: `compra` · proximaAcao: `agendar_reuniao`
 - extraiu: `{"nome": "Rafael", "score": 90}`
-- perfil apos o turno: `{"intencao": "compra", "score": 90, "precoMax": 650000, "regiao": "Butanta", "quartos": 3, "urgencia": "alta", "nome": "Rafael"}`
+- perfil apos o turno: `{"intencao": "compra", "score": 90, "precoMax": 650000, "regiao": "Butanta", "quartos": 3, "urgencia": "media", "nome": "Rafael"}`
 

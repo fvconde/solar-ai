@@ -1,0 +1,4 @@
+# Dependencias de desenvolvimento. O Dockerfile nao le este arquivo.
+-r requirements.txt
+
+pytest~=8.3.0
