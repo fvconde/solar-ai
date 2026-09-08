@@ -8,49 +8,54 @@ Modelo: `gemini-3.5-flash-lite`
 
 **Lead:** oi
 
-**Lia:** Olá! Você está procurando um imóvel para comprar ou para alugar?
+**Lia:** Oi. Para eu te ajudar a encontrar o imóvel ideal, você busca comprar ou alugar?
 
 - intencao: `indefinida` · proximaAcao: `continuar_conversa`
-- extraiu: `{"score": 10}`
-- perfil apos o turno: `{"score": 10}`
+- extraiu: `{"score": 0}`
+- perfil apos o turno: `{"score": 0}`
+- lacunas abertas: `intencao, regiao, faixa de preco, prazo, quartos, nome`
 
 ## Turno 2
 
 **Lead:** sei la, to so olhando
 
-**Lia:** Sem problemas, dar uma olhada ajuda a entender o mercado. Me conta pelo menos a região que você tem curiosidade de ver?
+**Lia:** Sem problemas, dar uma olhada é um bom começo. Você tem alguma região de preferência por enquanto?
 
 - intencao: `indefinida` · proximaAcao: `continuar_conversa`
-- extraiu: `{"score": 5}`
-- perfil apos o turno: `{"score": 5}`
+- extraiu: `{"score": 0}`
+- perfil apos o turno: `{"score": 0}`
+- lacunas abertas: `intencao, regiao, faixa de preco, prazo, quartos, nome`
 
 ## Turno 3
 
 **Lead:** nao sei ainda
 
-**Lia:** Tudo bem, a gente descobre isso aos poucos. Se você quiser, posso te colocar em contato com um dos nossos corretores para ele te ajudar a explorar as opções.
+**Lia:** Tudo bem, sem pressa. Qual faixa de preço faz sentido para você neste momento?
 
-- intencao: `indefinida` · proximaAcao: `agendar_reuniao`
+- intencao: `indefinida` · proximaAcao: `continuar_conversa`
 - extraiu: `{"score": 0}`
 - perfil apos o turno: `{"score": 0}`
+- lacunas abertas: `intencao, regiao, faixa de preco, prazo, quartos, nome`
 
 ## Turno 4
 
 **Lead:** depende do preco
 
-**Lia:** Entendo, o valor faz toda a diferença para decidir. Tem alguma faixa de preço que você tem em mente para começarmos a olhar?
+**Lia:** Entendo, o preço varia bastante conforme o imóvel. Se preferir, posso te colocar em contato com um corretor para ver algumas opções que cabem no seu orçamento.
 
-- intencao: `indefinida` · proximaAcao: `continuar_conversa`
-- extraiu: `{"score": 10}`
-- perfil apos o turno: `{"score": 10}`
+- intencao: `indefinida` · proximaAcao: `agendar_reuniao`
+- extraiu: `{"score": 0}`
+- perfil apos o turno: `{"score": 0}`
+- lacunas abertas: `intencao, regiao, faixa de preco, prazo, quartos, nome`
 
 ## Turno 5
 
 **Lead:** talvez zona oeste, mas nao tenho certeza de nada
 
-**Lia:** Zona oeste é uma ótima região. Qual número de quartos você costuma procurar?
+**Lia:** A zona oeste tem ótimas opções, sim. Qual faixa de preço faz mais sentido para você agora?
 
 - intencao: `indefinida` · proximaAcao: `continuar_conversa`
-- extraiu: `{"regiao": "zona oeste", "score": 15}`
-- perfil apos o turno: `{"score": 15, "regiao": "zona oeste"}`
+- extraiu: `{"regiao": "zona oeste", "score": 20}`
+- perfil apos o turno: `{"regiao": "zona oeste", "score": 20}`
+- lacunas abertas: `intencao, faixa de preco, prazo, quartos, nome`
 

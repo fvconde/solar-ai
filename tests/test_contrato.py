@@ -15,6 +15,7 @@ from app.contrato import (
 )
 from app.lia import prompts
 from app.lia.grafo import SaidaLia
+from app.lia.qualificacao import INVESTIMENTO, MORADIA
 
 CONVERSA = "0f0d4f6c-2b3a-4f1e-9a77-5c1e2b8d4a10"
 
@@ -122,13 +123,75 @@ class TestPrompts:
         assert "Lia" in prompts.persona()
         assert "camposExtraidos" in prompts._ler("turno.md")
 
-    def test_turno_substitui_os_tres_marcadores(self):
-        texto = prompts.turno(PerfilLead(), [], "quero comprar")
+    def test_turno_substitui_todos_os_marcadores(self):
+        texto = prompts.turno(PerfilLead(), [], "quero comprar", MORADIA)
 
         assert "{perfil}" not in texto
         assert "{historico}" not in texto
         assert "{mensagem}" not in texto
+        assert "{lacunas}" not in texto
         assert "quero comprar" in texto
+
+    def test_lacunas_saem_na_ordem_recebida(self):
+        bloco = self._bloco(prompts.turno(PerfilLead(), [], "oi", MORADIA))
+
+        assert bloco.index(MORADIA[0].pergunta) < bloco.index(MORADIA[1].pergunta)
+
+    def test_perfil_completo_diz_que_nao_falta_nada(self):
+        texto = prompts.turno(PerfilLead(), [], "oi", ())
+
+        assert "perfil esta completo" in texto
+
+    def test_lacuna_essencial_aberta_aparece_no_bloco(self):
+        bloco = self._bloco(prompts.turno(PerfilLead(), [], "oi", MORADIA))
+
+        assert "essencial para um corretor assumir: intencao, regiao, faixa de preco" in bloco
+        assert "montada sem a mensagem de agora" in bloco
+
+    def test_piso_atendido_nao_menciona_essencial(self):
+        opcionais = tuple(sinal for sinal in MORADIA if not sinal.essencial)
+        bloco = self._bloco(prompts.turno(PerfilLead(), [], "oi", opcionais))
+
+        assert "essencial" not in bloco
+        assert opcionais[0].pergunta in bloco
+
+    def test_o_bloco_devolve_a_decisao_para_a_proxima_acao(self):
+        bloco = self._bloco(prompts.turno(PerfilLead(), [], "oi", MORADIA))
+
+        assert "`proximaAcao` decide se ha proxima pergunta" in bloco
+
+    def test_desfecho_satisfeito_e_declarado_como_fato(self):
+        opcionais = tuple(sinal for sinal in INVESTIMENTO if not sinal.essencial)
+        bloco = self._bloco(
+            prompts.turno(PerfilLead(), [], "oi", opcionais, "direcionar_especialista")
+        )
+
+        assert "satisfaz a regra de `direcionar_especialista`" in bloco
+        assert opcionais[0].pergunta in bloco
+
+    def test_piso_aberto_nao_declara_desfecho_satisfeito(self):
+        bloco = self._bloco(
+            prompts.turno(PerfilLead(), [], "oi", INVESTIMENTO, "direcionar_especialista")
+        )
+
+        assert "satisfaz a regra" not in bloco
+        assert "faltava essencial" in bloco
+
+    def test_moradia_nunca_declara_desfecho_satisfeito(self):
+        opcionais = tuple(sinal for sinal in MORADIA if not sinal.essencial)
+        bloco = self._bloco(prompts.turno(PerfilLead(), [], "oi", opcionais, None))
+
+        assert "satisfaz a regra" not in bloco
+        assert "None" not in bloco
+
+    def test_o_bloco_nao_enumera_como_checklist(self):
+        bloco = self._bloco(prompts.turno(PerfilLead(), [], "oi", MORADIA))
+
+        assert "1. " not in bloco
+
+    @staticmethod
+    def _bloco(texto: str) -> str:
+        return texto.split(prompts.TITULO)[1].split("## O que devolver")[0]
 
     def test_perfil_vazio_diz_que_e_o_primeiro_contato(self):
         assert "primeiro contato" in prompts.turno(PerfilLead(), [], "oi")

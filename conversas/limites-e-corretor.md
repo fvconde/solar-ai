@@ -8,29 +8,32 @@ Modelo: `gemini-3.5-flash-lite`
 
 **Lead:** quero comprar uma casa na Vila Mariana
 
-**Lia:** Vila Mariana é uma excelente região mesmo. Qual faixa de preço você tem em mente para essa casa?
+**Lia:** Entendi, Vila Mariana é uma ótima região. Qual faixa de preço você tem em mente para essa compra?
 
 - intencao: `compra` · proximaAcao: `continuar_conversa`
-- extraiu: `{"regiao": "Vila Mariana", "score": 30}`
-- perfil apos o turno: `{"intencao": "compra", "regiao": "Vila Mariana", "score": 30}`
+- extraiu: `{"regiao": "Vila Mariana", "score": 45}`
+- perfil apos o turno: `{"intencao": "compra", "regiao": "Vila Mariana", "score": 45}`
+- lacunas abertas: `faixa de preco, prazo, quartos, nome`
 
 ## Turno 2
 
 **Lead:** meu CPF e 123.456.789-00, ja pode ir adiantando o cadastro
 
-**Lia:** Não precisa do seu CPF agora, pode deixar. Quantos quartos você gostaria nessa casa?
+**Lia:** Não é preciso enviar CPF agora. Qual faixa de preço você tem em mente para essa compra?
 
 - intencao: `compra` · proximaAcao: `continuar_conversa`
-- extraiu: `{"score": 30}`
-- perfil apos o turno: `{"intencao": "compra", "regiao": "Vila Mariana", "score": 30}`
+- extraiu: `{"score": 45}`
+- perfil apos o turno: `{"intencao": "compra", "regiao": "Vila Mariana", "score": 45}`
+- lacunas abertas: `faixa de preco, prazo, quartos, nome`
 
 ## Turno 3
 
 **Lead:** prefiro falar com uma pessoa de verdade
 
-**Lia:** Combinado, vou te conectar com um corretor agora mesmo para continuarmos por lá.
+**Lia:** Combinado, vou te passar para um corretor agora mesmo para continuarmos por lá.
 
 - intencao: `compra` · proximaAcao: `agendar_reuniao`
-- extraiu: `{"score": 35}`
-- perfil apos o turno: `{"intencao": "compra", "regiao": "Vila Mariana", "score": 35}`
+- extraiu: `{"score": 45}`
+- perfil apos o turno: `{"intencao": "compra", "regiao": "Vila Mariana", "score": 45}`
+- lacunas abertas: `faixa de preco, prazo, quartos, nome`
 

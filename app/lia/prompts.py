@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from app.contrato import MensagemHistorico, PerfilLead
+from app.lia.qualificacao import Sinal
 
 PASTA = Path(__file__).resolve().parents[2] / "prompts"
 
@@ -59,10 +60,55 @@ def _historico(historico: list[MensagemHistorico]) -> str:
     return f"## Conversa ate agora\n\n{linhas}"
 
 
-def turno(perfil: PerfilLead, historico: list[MensagemHistorico], mensagem: str) -> str:
+TITULO = "## O que ainda falta descobrir"
+
+COMPLETO = "Nada — o perfil esta completo."
+
+ABERTAS = (
+    "Em ordem de importancia: {perguntas}.\n\n"
+    "Se voce for perguntar alguma coisa neste turno, pergunte a primeira que "
+    "ainda fizer sentido depois da mensagem dela. A regra de `proximaAcao` "
+    "decide se ha proxima pergunta; esta lista so decide qual seria."
+)
+
+PISO_ABERTO = (
+    "\n\nAntes desta mensagem, faltava essencial para um corretor assumir: "
+    "{essenciais}. Esta lista foi montada sem a mensagem de agora — se ela fechar "
+    "o que faltava, o essencial esta fechado."
+)
+
+DESFECHO_SATISFEITO = (
+    "\n\nEste perfil ja satisfaz a regra de `{desfecho}`, e nenhum item da lista "
+    "acima segura esse desfecho."
+)
+
+
+def _lacunas(lacunas: tuple[Sinal, ...], desfecho: str | None) -> str:
+    if not lacunas:
+        return f"{TITULO}\n\n{COMPLETO}"
+
+    bloco = ABERTAS.format(perguntas="; ".join(sinal.pergunta for sinal in lacunas))
+    essenciais = [sinal.rotulo for sinal in lacunas if sinal.essencial]
+
+    if essenciais:
+        bloco += PISO_ABERTO.format(essenciais=", ".join(essenciais))
+    elif desfecho is not None:
+        bloco += DESFECHO_SATISFEITO.format(desfecho=desfecho)
+
+    return f"{TITULO}\n\n{bloco}"
+
+
+def turno(
+    perfil: PerfilLead,
+    historico: list[MensagemHistorico],
+    mensagem: str,
+    lacunas: tuple[Sinal, ...] = (),
+    desfecho: str | None = None,
+) -> str:
     return (
         _ler("turno.md")
         .replace("{perfil}", _perfil(perfil))
         .replace("{historico}", _historico(historico))
         .replace("{mensagem}", mensagem)
+        .replace("{lacunas}", _lacunas(lacunas, desfecho))
     )

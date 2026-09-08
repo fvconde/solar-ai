@@ -1,8 +1,8 @@
 """Grafo da Lia.
 
-Um no: le persona e contexto do turno, chama o Gemini com saida estruturada e
-devolve os campos do contrato. Nos especializados de qualificacao (S-12) e
-busca (S-15) entram depois.
+Tres nos, uma chamada ao LLM: `qualificar` calcula as lacunas do perfil,
+`responder` conversa com o Gemini e `pontuar` aplica a regua do score. O no de
+busca (S-15) entra depois.
 """
 
 import logging
@@ -17,13 +17,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 from app.contrato import (
+    LIMITE_EXPECTATIVA,
     CamposExtraidos,
     Intencao,
     ProximaAcao,
     TurnoRequest,
     TurnoResponse,
+    Urgencia,
 )
-from app.lia import prompts
+from app.lia import prompts, qualificacao
+from app.lia.qualificacao import Sinal
 
 logger = logging.getLogger("solar.lia")
 
@@ -36,6 +39,22 @@ class LiaIndisponivelError(RuntimeError):
         self.cota = cota
 
 
+class CamposExtraidosLLM(BaseModel):
+    """CamposExtraidos sem `score`: desde o S-12 quem pontua e a regua."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, extra="forbid"
+    )
+
+    nome: str | None = None
+    preco_min: int | None = None
+    preco_max: int | None = None
+    quartos: int | None = None
+    regiao: str | None = None
+    urgencia: Urgencia | None = None
+    expectativa_retorno: str | None = Field(default=None, max_length=LIMITE_EXPECTATIVA)
+
+
 class SaidaLia(BaseModel):
     model_config = ConfigDict(
         alias_generator=to_camel, populate_by_name=True, extra="forbid"
@@ -43,13 +62,16 @@ class SaidaLia(BaseModel):
 
     resposta: str = Field(min_length=1)
     intencao: Intencao
-    campos_extraidos: CamposExtraidos
+    campos_extraidos: CamposExtraidosLLM
     proxima_acao: ProximaAcao
 
 
 class EstadoTurno(TypedDict):
     requisicao: TurnoRequest
+    lacunas: tuple[Sinal, ...]
+    desfecho: str | None
     saida: SaidaLia
+    score: int
 
 
 def _temperatura() -> dict[str, float]:
@@ -85,6 +107,15 @@ def _e_cota(texto: str) -> bool:
     return any(marca in minusculo for marca in _MARCAS_DE_COTA)
 
 
+def _qualificar(estado: EstadoTurno) -> EstadoTurno:
+    perfil = estado["requisicao"].perfil_lead
+
+    return {
+        "lacunas": qualificacao.lacunas(perfil),
+        "desfecho": qualificacao.desfecho_da_trilha(perfil),
+    }
+
+
 def _responder(estado: EstadoTurno) -> EstadoTurno:
     requisicao = estado["requisicao"]
 
@@ -92,7 +123,11 @@ def _responder(estado: EstadoTurno) -> EstadoTurno:
         SystemMessage(content=prompts.persona()),
         HumanMessage(
             content=prompts.turno(
-                requisicao.perfil_lead, requisicao.historico, requisicao.mensagem
+                requisicao.perfil_lead,
+                requisicao.historico,
+                requisicao.mensagem,
+                estado["lacunas"],
+                estado["desfecho"],
             )
         ),
     ]
@@ -113,12 +148,27 @@ def _responder(estado: EstadoTurno) -> EstadoTurno:
     return {"saida": saida}
 
 
+def _pontuar(estado: EstadoTurno) -> EstadoTurno:
+    requisicao = estado["requisicao"]
+    saida = estado["saida"]
+
+    perfil = qualificacao.fundir(
+        requisicao.perfil_lead, saida.intencao, saida.campos_extraidos
+    )
+
+    return {"score": qualificacao.pontuar(perfil)}
+
+
 @lru_cache(maxsize=1)
 def _grafo():
     grafo = StateGraph(EstadoTurno)
+    grafo.add_node("qualificar", _qualificar)
     grafo.add_node("responder", _responder)
-    grafo.add_edge(START, "responder")
-    grafo.add_edge("responder", END)
+    grafo.add_node("pontuar", _pontuar)
+    grafo.add_edge(START, "qualificar")
+    grafo.add_edge("qualificar", "responder")
+    grafo.add_edge("responder", "pontuar")
+    grafo.add_edge("pontuar", END)
 
     return grafo.compile()
 
@@ -130,7 +180,9 @@ def responder(requisicao: TurnoRequest) -> TurnoResponse:
     return TurnoResponse(
         resposta=saida.resposta,
         intencao=saida.intencao,
-        campos_extraidos=saida.campos_extraidos,
+        campos_extraidos=CamposExtraidos(
+            **saida.campos_extraidos.model_dump(), score=estado["score"]
+        ),
         proxima_acao=saida.proxima_acao,
         imoveis_sugeridos=[],
     )

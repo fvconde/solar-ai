@@ -18,7 +18,7 @@ from uuid import uuid4
 import pytest
 
 from app.contrato import CamposExtraidos, TurnoRequest
-from app.lia import responder
+from app.lia import qualificacao, responder
 
 SEMPRE_PREENCHIDO = frozenset({"score"})
 
@@ -144,6 +144,28 @@ CASOS = [
         ),
         mensagem="qualquer lugar menos a zona leste",
         intencao="compra",
+    ),
+    Caso(
+        nome="duas-regioes-ficam-as-duas",
+        perfil={"intencao": "compra"},
+        historico=(
+            ("lead", "quero comprar um apartamento"),
+            ("agente", "Tem alguma regiao em mente?"),
+        ),
+        mensagem="pode ser em Pinheiros ou Perdizes",
+        intencao="compra",
+        contem={"regiao": "Pinheiros"},
+    ),
+    Caso(
+        nome="dois-numeros-de-quartos-guardam-o-menor",
+        perfil={"intencao": "compra", "regiao": "Santana"},
+        historico=(
+            ("lead", "quero comprar em Santana"),
+            ("agente", "Quantos quartos voce precisa?"),
+        ),
+        mensagem="2 ou 3 quartos, tanto faz",
+        intencao="compra",
+        extrai={"quartos": 2},
     ),
     Caso(
         nome="retificacao-substitui-o-valor-antigo",
@@ -339,7 +361,12 @@ def test_extrai_so_o_que_o_lead_disse(caso: Caso, ritmo) -> None:
     }
 
     assert not inventados, f"campos que ninguem mencionou: {inventados}"
-    assert campos["score"] is not None, "o score tem que sair em todo turno"
+
+    perfil = qualificacao.fundir(
+        caso.requisicao().perfil_lead, resposta.intencao, resposta.campos_extraidos
+    )
+
+    assert campos["score"] == qualificacao.pontuar(perfil), "o score nao veio da regua"
 
 
 def test_todo_campo_do_contrato_tem_ao_menos_um_caso() -> None:

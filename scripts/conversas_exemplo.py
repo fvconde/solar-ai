@@ -9,11 +9,11 @@ Os leads sao ficticios. Nenhum dado real entra aqui: o free tier da Gemini usa o
 conteudo enviado para treino, e a camada de mascaramento so chega no S-34.
 
 Uso:
-    python scripts/conversas_exemplo.py            # roda as 6
+    python scripts/conversas_exemplo.py            # roda as 7
     python scripts/conversas_exemplo.py --so 3     # roda so a 3
     python scripts/conversas_exemplo.py --listar   # nomes, sem gastar cota
 
-Cada rodada completa custa cerca de 24 chamadas ao Gemini. Ha uma pausa de 5 s entre
+Cada rodada completa custa cerca de 29 chamadas ao Gemini. Ha uma pausa de 5 s entre
 chamadas porque o free tier limita tambem por minuto (4 s dava 15/min, que e o
 proprio teto, e o outlier voltava): em rajada, o SDK entra em
 backoff e um turno normal de 2 s aparece como 30 s.
@@ -95,6 +95,18 @@ ROTEIROS: list[dict] = [
             "prefiro falar com uma pessoa de verdade",
         ],
     },
+    {
+        "nome": "qualificacao-completa",
+        "resumo": "Aceite do S-12: lead responde so o que e perguntado, e em 6 turnos o perfil fecha em 100.",
+        "mensagens": [
+            "boa tarde, quero comprar um apartamento pra morar",
+            "na zona sul, de preferencia Vila Mariana",
+            "ate 700 mil",
+            "quero mudar ate o mes que vem",
+            "2 quartos",
+            "sou a Bia",
+        ],
+    },
 ]
 
 
@@ -113,26 +125,16 @@ def _carregar_env() -> None:
             os.environ[nome] = valor
 
 
-def _fundir(perfil: dict, intencao: str, extraidos: dict) -> dict:
-    novo = dict(perfil)
-    if intencao and intencao != "indefinida":
-        novo["intencao"] = intencao
-    for chave, valor in extraidos.items():
-        if valor is not None:
-            novo[chave] = valor
-    return novo
-
-
 def _rodar(roteiro: dict) -> tuple[str, list[float]]:
     from datetime import datetime, timezone
     from uuid import uuid4
 
-    from app.contrato import TurnoRequest
-    from app.lia import responder
+    from app.contrato import PerfilLead, TurnoRequest
+    from app.lia import qualificacao, responder
 
     conversa_id = str(uuid4())
     historico: list[dict] = []
-    perfil: dict = {}
+    perfil = PerfilLead()
     latencias: list[float] = []
 
     linhas = [
@@ -150,7 +152,7 @@ def _rodar(roteiro: dict) -> tuple[str, list[float]]:
                 "conversaId": conversa_id,
                 "mensagem": texto,
                 "historico": historico,
-                "perfilLead": perfil,
+                "perfilLead": perfil.model_dump(by_alias=True, exclude_none=True),
             }
         )
 
@@ -165,7 +167,7 @@ def _rodar(roteiro: dict) -> tuple[str, list[float]]:
 
         corpo = resposta.model_dump(by_alias=True)
         extraidos = {k: v for k, v in corpo["camposExtraidos"].items() if v is not None}
-        perfil = _fundir(perfil, corpo["intencao"], corpo["camposExtraidos"])
+        perfil = qualificacao.fundir(perfil, resposta.intencao, resposta.campos_extraidos)
 
         agora = datetime.now(timezone.utc).isoformat()
         historico.append({"papel": "lead", "texto": texto, "em": agora})
@@ -180,7 +182,10 @@ def _rodar(roteiro: dict) -> tuple[str, list[float]]:
             "",
             f"- intencao: `{corpo['intencao']}` · proximaAcao: `{corpo['proximaAcao']}`",
             f"- extraiu: `{json.dumps(extraidos, ensure_ascii=False) if extraidos else 'nada'}`",
-            f"- perfil apos o turno: `{json.dumps(perfil, ensure_ascii=False)}`",
+            f"- perfil apos o turno: "
+            f"`{json.dumps(perfil.model_dump(by_alias=True, exclude_none=True), ensure_ascii=False)}`",
+            f"- lacunas abertas: "
+            f"`{', '.join(s.rotulo for s in qualificacao.lacunas(perfil)) or 'nenhuma'}`",
             "",
         ]
 
@@ -189,7 +194,7 @@ def _rodar(roteiro: dict) -> tuple[str, list[float]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Conversas de exemplo da Lia (S-06).")
-    parser.add_argument("--so", type=int, metavar="N", help="roda so o roteiro N (1 a 6)")
+    parser.add_argument("--so", type=int, metavar="N", help="roda so o roteiro N (1 a 7)")
     parser.add_argument("--listar", action="store_true", help="lista os roteiros e sai")
     args = parser.parse_args()
 
