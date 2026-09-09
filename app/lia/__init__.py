@@ -1,3 +1,4 @@
 from app.lia.grafo import LiaIndisponivelError, responder
+from app.lia.indice import IndiceIndisponivelError
 
-__all__ = ["LiaIndisponivelError", "responder"]
+__all__ = ["IndiceIndisponivelError", "LiaIndisponivelError", "responder"]

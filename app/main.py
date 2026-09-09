@@ -15,7 +15,8 @@ from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
 from app.contrato import TurnoRequest, TurnoResponse
-from app.lia import LiaIndisponivelError, responder
+from app.lia import IndiceIndisponivelError, LiaIndisponivelError, responder
+from app.lia import indice as indice_imoveis
 
 SERVICO = "solar-ai"
 ESSENCIAIS = frozenset({"gemini_config"})
@@ -62,6 +63,20 @@ def _checar_gemini_config() -> CheckResult:
     return CheckResult(status="down", reason=_motivo(detalhe))
 
 
+def _checar_indice() -> CheckResult:
+    try:
+        indice = indice_imoveis.atual()
+    except IndiceIndisponivelError as erro:
+        return CheckResult(status="down", reason=_motivo(str(erro)))
+
+    return CheckResult(
+        status="up",
+        reason=_motivo(
+            f"{len(indice.imoveis)} imoveis em {indice.dimensao} dimensoes ({indice.origem})"
+        ),
+    )
+
+
 def _agregar(checks: dict[str, CheckResult]) -> Status:
     falhos = [nome for nome, check in checks.items() if check.status != "up"]
 
@@ -69,6 +84,22 @@ def _agregar(checks: dict[str, CheckResult]) -> Status:
         return "up"
 
     return "down" if any(nome in ESSENCIAIS for nome in falhos) else "degraded"
+
+
+def _construir_indice() -> None:
+    try:
+        indice = indice_imoveis.construir()
+    except IndiceIndisponivelError as erro:
+        logger.error("Indice de imoveis nao subiu: %s", erro)
+        return
+
+    logger.info(
+        "Indice de imoveis pronto: imoveis=%d dimensao=%d modelo=%s origem=%s",
+        len(indice.imoveis),
+        indice.dimensao,
+        indice.modelo,
+        indice.origem,
+    )
 
 
 @asynccontextmanager
@@ -79,6 +110,7 @@ async def _ciclo_de_vida(_: FastAPI):
         os.getenv("GEMINI_MODEL"),
         bool(os.getenv("GEMINI_API_KEY")),
     )
+    _construir_indice()
     yield
 
 
@@ -102,7 +134,10 @@ def raiz():
     responses={503: {"model": HealthResponse, "description": "status down"}},
 )
 def health(response: Response) -> HealthResponse:
-    checks = {"gemini_config": _checar_gemini_config()}
+    checks = {
+        "gemini_config": _checar_gemini_config(),
+        "indice_imoveis": _checar_indice(),
+    }
     status = _agregar(checks)
 
     if status == "down":

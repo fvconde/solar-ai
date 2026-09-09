@@ -1,4 +1,5 @@
-# Esqueleto HTTP. O indice vetorial entra na Fase 2, nao aqui.
+# Esqueleto HTTP. O indice vetorial do S-14 nao trouxe dependencia nova:
+# embedding vem do langchain-google-genai e o cosseno e Python puro.
 fastapi~=0.115.0
 uvicorn[standard]~=0.34.0
 python-dotenv~=1.0.0
