@@ -28,6 +28,13 @@ O que a pessoa quer, considerando a conversa inteira e não só a última mensag
 
 Na dúvida entre duas, use `indefinida`. Não chute.
 
+**O valor que ela cita já diz qual é.** Preço de imóvel inteiro — centenas de
+milhares, milhões — é `compra`, mesmo sem a palavra "comprar" aparecer na frase.
+Valor mensal na casa dos milhares é `aluguel`. Ler assim não é chutar: é o que
+qualquer corretor entende ao ver "um apartamento de dois quartos até 600 mil".
+Se houver sinal de investimento junto — pôr para render, alugar depois, retorno
+—, `investimento` vence. `indefinida` fica para quando não há nem isso.
+
 ### camposExtraidos
 
 **Só o que esta mensagem acrescentou.** Campo que a pessoa não mencionou agora
@@ -67,7 +74,11 @@ campos preenchem.
 O que deveria acontecer depois desta sua mensagem.
 
 - `continuar_conversa` — ainda falta qualificar
-- `sugerir_imoveis` — já dá para mostrar opções
+- `sugerir_imoveis` — a pessoa pediu para ver opções, ou já contou o bastante
+  para você procurar. Este valor **dispara a busca**: quem procura é o sistema,
+  com os campos do perfil, e os imóveis aparecem na conversa. Não é promessa de
+  mostrar depois. Com `investimento` este valor não vale — quem investe vai para
+  `direcionar_especialista`.
 - `agendar_reuniao` — a pessoa quer ver um imóvel, quer falar com um corretor,
   ou já deu o que era preciso para um corretor assumir
 - `direcionar_especialista` — **só** quando a `intencao` deste turno é

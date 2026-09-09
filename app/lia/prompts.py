@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from app.contrato import MensagemHistorico, PerfilLead
+from app.lia.indice import Filtro, Resultado
 from app.lia.qualificacao import Sinal
 
 PASTA = Path(__file__).resolve().parents[2] / "prompts"
@@ -111,4 +112,106 @@ def turno(
         .replace("{historico}", _historico(historico))
         .replace("{mensagem}", mensagem)
         .replace("{lacunas}", _lacunas(lacunas, desfecho))
+    )
+
+
+TITULO_IMOVEIS = "## Imoveis que a busca devolveu"
+
+ACHADOS = (
+    "Em ordem de aderencia ao que ela pediu. **Existem estes e mais nenhum** — o "
+    "que nao esta nesta lista nao esta na base.\n\n{fichas}"
+)
+
+VAZIO = (
+    "Nenhum. A busca nao devolveu imovel algum com estes criterios: {criterios}.\n\n"
+    "Isto e um fato da base, e um fato para dizer. Nao existe imovel parecido "
+    "guardado em outro lugar."
+)
+
+SEM_CRITERIO = "nenhum criterio estruturado, so o texto da conversa"
+
+
+def _reais(valor: int) -> str:
+    return f"R$ {valor:,}".replace(",", ".")
+
+
+def _precos(resultado: Resultado) -> str:
+    imovel = resultado.imovel
+    valores = []
+
+    if imovel.preco_venda is not None:
+        valores.append(f"venda {_reais(imovel.preco_venda)}")
+
+    if imovel.preco_aluguel is not None:
+        valores.append(f"aluguel {_reais(imovel.preco_aluguel)} por mes")
+
+    if imovel.condominio is not None:
+        valores.append(f"condominio {_reais(imovel.condominio)}")
+
+    return ", ".join(valores)
+
+
+def _contar(quantidade: int, singular: str, plural: str) -> str:
+    return f"{quantidade} {singular if quantidade == 1 else plural}"
+
+
+def _ficha(resultado: Resultado) -> str:
+    imovel = resultado.imovel
+    quartos = _contar(imovel.quartos, "quarto", "quartos")
+    banheiros = _contar(imovel.banheiros, "banheiro", "banheiros")
+    vagas = _contar(imovel.vagas, "vaga", "vagas")
+
+    return (
+        f"- **{imovel.id}** — {imovel.tipo} no {imovel.bairro}, zona {imovel.zona}. "
+        f"{quartos}, {banheiros}, {vagas}, {imovel.metragem} m2. "
+        f"{_precos(resultado)}.\n  {imovel.descricao}"
+    )
+
+
+def _criterios(filtro: Filtro) -> str:
+    partes = []
+
+    if filtro.tipo is not None:
+        partes.append(filtro.tipo)
+
+    if filtro.quartos is not None:
+        partes.append(f"a partir de {filtro.quartos} quartos")
+
+    if filtro.regiao:
+        partes.append(f"regiao {filtro.regiao}")
+
+    if filtro.preco_min is not None:
+        partes.append(f"a partir de {_reais(filtro.preco_min)}")
+
+    if filtro.preco_max is not None:
+        partes.append(f"ate {_reais(filtro.preco_max)}")
+
+    if filtro.intencao is not None and filtro.intencao != "indefinida":
+        partes.append(f"para {filtro.intencao}")
+
+    return ", ".join(partes) or SEM_CRITERIO
+
+
+def _imoveis(resultados: list[Resultado], filtro: Filtro) -> str:
+    if not resultados:
+        return f"{TITULO_IMOVEIS}\n\n{VAZIO.format(criterios=_criterios(filtro))}"
+
+    fichas = "\n".join(_ficha(resultado) for resultado in resultados)
+
+    return f"{TITULO_IMOVEIS}\n\n{ACHADOS.format(fichas=fichas)}"
+
+
+def apresentacao(
+    perfil: PerfilLead,
+    historico: list[MensagemHistorico],
+    mensagem: str,
+    resultados: list[Resultado],
+    filtro: Filtro,
+) -> str:
+    return (
+        _ler("apresentacao.md")
+        .replace("{perfil}", _perfil(perfil))
+        .replace("{historico}", _historico(historico))
+        .replace("{mensagem}", mensagem)
+        .replace("{imoveis}", _imoveis(resultados, filtro))
     )

@@ -77,18 +77,23 @@ class Filtro:
     preco_max: int | None = None
     quartos: int | None = None
     regiao: str | None = None
+    tipo: str | None = None
 
     @classmethod
-    def do_perfil(cls, perfil: PerfilLead) -> "Filtro":
+    def do_perfil(cls, perfil: PerfilLead, tipo: str | None = None) -> "Filtro":
         return cls(
             intencao=perfil.intencao,
             preco_min=perfil.preco_min,
             preco_max=perfil.preco_max,
             quartos=perfil.quartos,
             regiao=perfil.regiao,
+            tipo=tipo,
         )
 
     def aceita(self, imovel: Imovel) -> bool:
+        if self.tipo is not None and imovel.tipo != self.tipo:
+            return False
+
         if self.quartos is not None and imovel.quartos < self.quartos:
             return False
 
@@ -119,6 +124,109 @@ class Filtro:
             return imovel.preco_venda
 
         return None
+
+
+SINONIMOS_DE_TIPO = {
+    "apartamento": "apartamento",
+    "apartamentos": "apartamento",
+    "apto": "apartamento",
+    "aptos": "apartamento",
+    "ape": "apartamento",
+    "apes": "apartamento",
+    "casa": "casa",
+    "casas": "casa",
+    "sobrado": "casa",
+    "sobrados": "casa",
+    "cobertura": "cobertura",
+    "coberturas": "cobertura",
+    "studio": "studio",
+    "studios": "studio",
+    "estudio": "studio",
+    "estudios": "studio",
+    "kitnet": "studio",
+    "quitinete": "studio",
+}
+
+_NEGACOES = frozenset({"nao", "nem", "exceto", "menos", "sem", "nada"})
+_JANELA_DA_NEGACAO = 3
+
+
+def tipo_pedido(mensagem: str, historico: Sequence | None = None) -> str | None:
+    """O tipo de imovel que o lead nomeou, da fala mais recente para a mais antiga.
+
+    Existe porque `tipo` nao esta no `PerfilLead`, e o contrato do `POST /turn`
+    esta congelado desde o S-05: mexer nele custa commit coordenado em dois repos
+    e uma migration. Enquanto isso, "quero apartamento" e restricao dura tanto
+    quanto "2 quartos" -- devolver uma casa para quem pediu apartamento derruba a
+    confianca na busca inteira.
+
+    Palavra precedida de negacao nao conta: e a mesma armadilha do bug de negacao
+    do S-11, e aqui ela viraria filtro em vez de campo.
+    """
+    falas = [mensagem]
+
+    for anterior in reversed(list(historico or ())):
+        if getattr(anterior, "papel", None) == "lead":
+            falas.append(anterior.texto)
+
+    for fala in falas:
+        tipo = _tipo_na_fala(fala)
+
+        if tipo is not None:
+            return tipo
+
+    return None
+
+
+def _tipo_na_fala(fala: str) -> str | None:
+    palavras = re.findall(r"[a-z0-9]+", _sem_acento(fala))
+
+    for posicao, palavra in enumerate(palavras):
+        tipo = SINONIMOS_DE_TIPO.get(palavra)
+
+        if tipo is None:
+            continue
+
+        anteriores = palavras[max(0, posicao - _JANELA_DA_NEGACAO) : posicao]
+
+        if not _NEGACOES.intersection(anteriores):
+            return tipo
+
+    return None
+
+
+_INTENCAO_NA_CONSULTA = {
+    "compra": "para comprar",
+    "aluguel": "para alugar",
+    "investimento": "para investir",
+}
+
+
+def texto_da_consulta(mensagem: str, perfil: PerfilLead) -> str:
+    """O lado da consulta do embedding, espelho do `Imovel.texto`.
+
+    A mensagem vem primeiro porque e onde o desejo aparece em linguagem natural.
+    O perfil vem depois e sustenta a busca quando a mensagem sozinha nao descreve
+    imovel nenhum -- "pode ser", "manda o que voce achar". Preco fica de fora de
+    proposito: ele ja e restricao dura no `Filtro`, e numero em texto embutido
+    aproxima por semelhanca de digito, nao de imovel.
+    """
+    partes = []
+
+    if perfil.quartos is not None:
+        quartos = "1 quarto" if perfil.quartos == 1 else f"{perfil.quartos} quartos"
+        partes.append(f"de {quartos}")
+
+    if perfil.regiao:
+        partes.append(f"na regiao {perfil.regiao}")
+
+    if perfil.intencao in _INTENCAO_NA_CONSULTA:
+        partes.append(_INTENCAO_NA_CONSULTA[perfil.intencao])
+
+    if not partes:
+        return mensagem
+
+    return f"{mensagem}\n\nImovel {' '.join(partes)}."
 
 
 @dataclass(frozen=True, slots=True)
