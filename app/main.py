@@ -20,6 +20,9 @@ from app.lia import indice as indice_imoveis
 
 SERVICO = "solar-ai"
 ESSENCIAIS = frozenset({"gemini_config"})
+NIVEIS_DE_LOG = frozenset({"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"})
+
+_FORMATO_DE_LOG = "%(levelname)s %(name)s %(message)s"
 
 logger = logging.getLogger("solar")
 
@@ -86,6 +89,20 @@ def _agregar(checks: dict[str, CheckResult]) -> Status:
     return "down" if any(nome in ESSENCIAIS for nome in falhos) else "degraded"
 
 
+def configurar_log() -> str:
+    """Liga os logs do `solar`, que o uvicorn nao configura por serem nossos."""
+    bruto = os.getenv("SOLAR_LOG_LEVEL", "").strip().upper()
+    nivel = bruto if bruto in NIVEIS_DE_LOG else "INFO"
+
+    logging.basicConfig(level=nivel, format=_FORMATO_DE_LOG)
+    logger.setLevel(nivel)
+
+    if bruto and bruto != nivel:
+        logger.warning("SOLAR_LOG_LEVEL=%r invalido; usando %s", bruto, nivel)
+
+    return nivel
+
+
 def _construir_indice() -> None:
     try:
         indice = indice_imoveis.construir()
@@ -104,6 +121,7 @@ def _construir_indice() -> None:
 
 @asynccontextmanager
 async def _ciclo_de_vida(_: FastAPI):
+    configurar_log()
     logger.info(
         "solar-ai versao=%s modelo=%s chave_carregada=%s",
         _versao(),
