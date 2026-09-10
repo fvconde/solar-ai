@@ -1,8 +1,9 @@
 """Carga dos prompts da Lia a partir de prompts/."""
 
+from datetime import timedelta, timezone
 from pathlib import Path
 
-from app.contrato import MensagemHistorico, PerfilLead
+from app.contrato import MensagemHistorico, PerfilLead, SlotOferecido
 from app.lia.indice import Filtro, Resultado
 from app.lia.qualificacao import Sinal
 
@@ -99,12 +100,42 @@ def _lacunas(lacunas: tuple[Sinal, ...], desfecho: str | None) -> str:
     return f"{TITULO}\n\n{bloco}"
 
 
+TITULO_AGENDA = "## Agenda do corretor"
+
+SEM_HORARIOS = (
+    "Nenhum horario livre foi recebido. Se a pessoa pedir para agendar, nao "
+    "invente data: diga que a confirmacao vira pelo contato informado."
+)
+
+
+def _agenda(slots: list[SlotOferecido]) -> str:
+    if not slots:
+        return f"{TITULO_AGENDA}\n\n{SEM_HORARIOS}"
+
+    local = timezone(timedelta(hours=-3))
+    linhas = []
+
+    for slot in slots[:3]:
+        inicio = slot.inicio.astimezone(local)
+        fim = slot.fim.astimezone(local)
+        linhas.append(
+            f"- id `{slot.id}` — {inicio:%d/%m/%Y}, das {inicio:%H:%M} "
+            f"as {fim:%H:%M} (horario de Sao Paulo)"
+        )
+
+    return (
+        f"{TITULO_AGENDA}\n\nEstes sao os unicos horarios que podem ser "
+        "oferecidos agora:\n\n" + "\n".join(linhas)
+    )
+
+
 def turno(
     perfil: PerfilLead,
     historico: list[MensagemHistorico],
     mensagem: str,
     lacunas: tuple[Sinal, ...] = (),
     desfecho: str | None = None,
+    agenda: list[SlotOferecido] | None = None,
 ) -> str:
     return (
         _ler("turno.md")
@@ -112,6 +143,7 @@ def turno(
         .replace("{historico}", _historico(historico))
         .replace("{mensagem}", mensagem)
         .replace("{lacunas}", _lacunas(lacunas, desfecho))
+        .replace("{agenda}", _agenda(agenda or []))
     )
 
 
