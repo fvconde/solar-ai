@@ -76,11 +76,18 @@ class ImovelSugerido(_Contrato):
     motivo: str
 
 
+class SlotOferecido(_Contrato):
+    id: int
+    inicio: datetime
+    fim: datetime
+
+
 class TurnoRequest(_Contrato):
     conversa_id: UUID
     mensagem: str = Field(min_length=1, max_length=LIMITE_MENSAGEM)
     historico: list[MensagemHistorico] = Field(default_factory=list, max_length=LIMITE_HISTORICO)
     perfil_lead: PerfilLead = Field(default_factory=PerfilLead)
+    agenda: list[SlotOferecido] = Field(default_factory=list)
 
 
 class TurnoResponse(_Contrato):
@@ -89,3 +96,4 @@ class TurnoResponse(_Contrato):
     campos_extraidos: CamposExtraidos
     proxima_acao: ProximaAcao
     imoveis_sugeridos: list[ImovelSugerido] = Field(default_factory=list, max_length=LIMITE_IMOVEIS)
+    slot_escolhido: int | None = None

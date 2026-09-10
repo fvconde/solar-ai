@@ -11,6 +11,7 @@ from app.contrato import (
     CamposExtraidos,
     MensagemHistorico,
     PerfilLead,
+    SlotOferecido,
     TurnoRequest,
 )
 from app.lia import prompts
@@ -30,6 +31,7 @@ def _saida(**alteracoes) -> dict:
         "intencao": "compra",
         "camposExtraidos": {},
         "proximaAcao": "continuar_conversa",
+        "slotEscolhido": None,
     }
     corpo.update(alteracoes)
     return corpo
@@ -71,6 +73,28 @@ class TestTurnoRequest:
 
         assert requisicao.historico == []
         assert requisicao.perfil_lead == PerfilLead()
+        assert requisicao.agenda == []
+
+    def test_aceita_agenda_em_camelcase(self):
+        inicio = datetime(2026, 9, 10, 15, 0, tzinfo=timezone.utc)
+
+        requisicao = TurnoRequest.model_validate(
+            {
+                "conversaId": CONVERSA,
+                "mensagem": "quinta de tarde",
+                "agenda": [
+                    {
+                        "id": 42,
+                        "inicio": inicio.isoformat(),
+                        "fim": inicio.replace(hour=16).isoformat(),
+                    }
+                ],
+            }
+        )
+
+        assert requisicao.agenda == [
+            SlotOferecido(id=42, inicio=inicio, fim=inicio.replace(hour=16))
+        ]
 
     def test_recusa_mensagem_vazia(self):
         with pytest.raises(ValidationError):
@@ -115,6 +139,7 @@ class TestSaidaLia:
             "intencao",
             "campos_extraidos",
             "proxima_acao",
+            "slot_escolhido",
         }
 
 
@@ -130,7 +155,18 @@ class TestPrompts:
         assert "{historico}" not in texto
         assert "{mensagem}" not in texto
         assert "{lacunas}" not in texto
+        assert "{agenda}" not in texto
         assert "quero comprar" in texto
+
+    def test_turno_lista_so_os_horarios_recebidos(self):
+        inicio = datetime(2026, 9, 10, 18, 0, tzinfo=timezone.utc)
+        agenda = [SlotOferecido(id=42, inicio=inicio, fim=inicio.replace(hour=19))]
+
+        texto = prompts.turno(PerfilLead(), [], "quinta de tarde", agenda=agenda)
+
+        assert "id `42`" in texto
+        assert "15:00 as 16:00" in texto
+        assert "id `43`" not in texto
 
     def test_lacunas_saem_na_ordem_recebida(self):
         bloco = self._bloco(prompts.turno(PerfilLead(), [], "oi", MORADIA))

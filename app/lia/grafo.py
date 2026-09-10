@@ -1,7 +1,8 @@
 """Grafo da Lia.
 
-Cinco nos e uma chamada ao LLM no turno comum: `qualificar` calcula as lacunas
-do perfil, `responder` conversa com o Gemini e `pontuar` aplica a regua do score.
+Seis nos e uma chamada ao LLM no turno comum: `qualificar` calcula as lacunas,
+`agendar` injeta a agenda recebida no prompt, `responder` conversa com o Gemini
+e `pontuar` aplica a regua do score.
 
 Quando o proprio modelo diz que e hora de mostrar opcoes, o turno segue por mais
 dois nos: `consultar` busca no indice com o perfil ja fundido -- e por isso a
@@ -14,7 +15,7 @@ comum continua custando 1 chamada e nenhum embedding.
 import logging
 import os
 from functools import lru_cache
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -29,6 +30,7 @@ from app.contrato import (
     Intencao,
     PerfilLead,
     ProximaAcao,
+    SlotOferecido,
     TurnoRequest,
     TurnoResponse,
     Urgencia,
@@ -77,6 +79,7 @@ class SaidaLia(BaseModel):
     intencao: Intencao
     campos_extraidos: CamposExtraidosLLM
     proxima_acao: ProximaAcao
+    slot_escolhido: int | None = None
 
 
 class MotivoDoImovel(BaseModel):
@@ -99,6 +102,7 @@ class EstadoTurno(TypedDict):
     requisicao: TurnoRequest
     lacunas: tuple[Sinal, ...]
     desfecho: str | None
+    agenda: list[SlotOferecido]
     saida: SaidaLia
     score: int
     perfil: PerfilLead
@@ -159,6 +163,11 @@ def _qualificar(estado: EstadoTurno) -> EstadoTurno:
     }
 
 
+def _agendar(estado: EstadoTurno) -> EstadoTurno:
+    """No puro: leva ao prompt apenas os horarios recebidos da API dona do banco."""
+    return {"agenda": estado["requisicao"].agenda}
+
+
 def _invocar(modelo, mensagens: list, esperado: type[BaseModel]) -> BaseModel:
     try:
         saida = modelo.invoke(mensagens)
@@ -188,6 +197,7 @@ def _responder(estado: EstadoTurno) -> EstadoTurno:
                 requisicao.mensagem,
                 estado["lacunas"],
                 estado["desfecho"],
+                estado["agenda"],
             )
         ),
     ]
@@ -319,12 +329,14 @@ def _apos_consultar(estado: EstadoTurno) -> str:
 def _grafo():
     grafo = StateGraph(EstadoTurno)
     grafo.add_node("qualificar", _qualificar)
+    grafo.add_node("agendar", _agendar)
     grafo.add_node("responder", _responder)
     grafo.add_node("pontuar", _pontuar)
     grafo.add_node("consultar", _consultar)
     grafo.add_node("apresentar", _apresentar)
     grafo.add_edge(START, "qualificar")
-    grafo.add_edge("qualificar", "responder")
+    grafo.add_edge("qualificar", "agendar")
+    grafo.add_edge("agendar", "responder")
     grafo.add_edge("responder", "pontuar")
     grafo.add_conditional_edges("pontuar", _apos_pontuar, {"consultar": "consultar", END: END})
     grafo.add_conditional_edges(
@@ -374,13 +386,21 @@ def _sugeridos(
     return sugeridos
 
 
-def _proxima_acao(saida: SaidaLia, imoveis: list[ImovelSugerido]) -> ProximaAcao:
+def _proxima_acao(
+    saida: SaidaLia,
+    imoveis: list[ImovelSugerido],
+    lacunas: tuple[Sinal, ...],
+    desfecho: str | None,
+) -> ProximaAcao:
     """Este campo descreve o que aconteceu, nao o que o modelo pretendia.
 
     Quem o le depois -- a trilha do front, o painel do corretor -- precisa poder
     confiar nele. Entao ele desce quando a busca nao trouxe nada (vazia ou indice
     fora do ar) e sobe quando a regua disparou a busca e o lead recebeu imoveis
-    num turno que o modelo tinha marcado como `continuar_conversa`.
+    num turno que o modelo tinha marcado como `continuar_conversa`. O desfecho
+    deterministico de uma trilha ja fechada tambem corrige a tentativa do modelo
+    de prolongar a qualificacao; encerramento e acoes explicitas continuam
+    prevalecendo.
     """
     if imoveis:
         return GATILHO_DA_BUSCA
@@ -388,7 +408,20 @@ def _proxima_acao(saida: SaidaLia, imoveis: list[ImovelSugerido]) -> ProximaAcao
     if saida.proxima_acao == GATILHO_DA_BUSCA:
         return "continuar_conversa"
 
+    if (
+        saida.proxima_acao == "continuar_conversa"
+        and desfecho is not None
+        and not any(sinal.essencial for sinal in lacunas)
+    ):
+        return cast(ProximaAcao, desfecho)
+
     return saida.proxima_acao
+
+
+def _slot_escolhido(saida: SaidaLia, agenda: list[SlotOferecido]) -> int | None:
+    """Gate estrutural: id que nao veio do banco nunca atravessa a fronteira."""
+    oferecidos = {slot.id for slot in agenda}
+    return saida.slot_escolhido if saida.slot_escolhido in oferecidos else None
 
 
 def responder(requisicao: TurnoRequest) -> TurnoResponse:
@@ -403,6 +436,12 @@ def responder(requisicao: TurnoRequest) -> TurnoResponse:
         campos_extraidos=CamposExtraidos(
             **saida.campos_extraidos.model_dump(), score=estado["score"]
         ),
-        proxima_acao=_proxima_acao(saida, imoveis),
+        proxima_acao=_proxima_acao(
+            saida,
+            imoveis,
+            estado["lacunas"],
+            estado["desfecho"],
+        ),
         imoveis_sugeridos=imoveis,
+        slot_escolhido=_slot_escolhido(saida, requisicao.agenda),
     )
