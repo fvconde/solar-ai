@@ -17,7 +17,7 @@ import os
 from functools import lru_cache
 from typing import TypedDict, cast
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, ConfigDict, Field
@@ -38,6 +38,7 @@ from app.contrato import (
 from app.lia import indice as indice_imoveis
 from app.lia import prompts, qualificacao
 from app.lia.indice import Filtro, IndiceIndisponivelError, Resultado
+from app.lia.mascaramento import MascaradorPII
 from app.lia.qualificacao import Sinal
 
 logger = logging.getLogger("solar.lia")
@@ -100,6 +101,7 @@ class SaidaApresentacao(BaseModel):
 
 class EstadoTurno(TypedDict):
     requisicao: TurnoRequest
+    mascarador: MascaradorPII
     lacunas: tuple[Sinal, ...]
     desfecho: str | None
     agenda: list[SlotOferecido]
@@ -168,9 +170,46 @@ def _agendar(estado: EstadoTurno) -> EstadoTurno:
     return {"agenda": estado["requisicao"].agenda}
 
 
-def _invocar(modelo, mensagens: list, esperado: type[BaseModel]) -> BaseModel:
+def _mensagens_mascaradas(
+    mensagens: list[BaseMessage], mascarador: MascaradorPII
+) -> list[BaseMessage]:
+    """Ultima barreira antes da geracao: nenhum texto cru atravessa daqui."""
+    def proteger(conteudo):
+        if isinstance(conteudo, str):
+            return mascarador.mascarar(conteudo)
+        if isinstance(conteudo, list):
+            return [proteger(item) for item in conteudo]
+        if isinstance(conteudo, dict):
+            return {chave: proteger(valor) for chave, valor in conteudo.items()}
+        return conteudo
+
+    return [
+        mensagem.model_copy(update={"content": proteger(mensagem.content)})
+        for mensagem in mensagens
+    ]
+
+
+def _desmascarar_saida(saida: BaseModel, mascarador: MascaradorPII) -> BaseModel:
+    def restaurar(valor):
+        if isinstance(valor, str):
+            return mascarador.desmascarar(valor)
+        if isinstance(valor, list):
+            return [restaurar(item) for item in valor]
+        if isinstance(valor, dict):
+            return {chave: restaurar(item) for chave, item in valor.items()}
+        return valor
+
+    return type(saida).model_validate(restaurar(saida.model_dump()))
+
+
+def _invocar(
+    modelo,
+    mensagens: list[BaseMessage],
+    esperado: type[BaseModel],
+    mascarador: MascaradorPII,
+) -> BaseModel:
     try:
-        saida = modelo.invoke(mensagens)
+        saida = modelo.invoke(_mensagens_mascaradas(mensagens, mascarador))
     except LiaIndisponivelError:
         raise
     except Exception as erro:
@@ -182,7 +221,7 @@ def _invocar(modelo, mensagens: list, esperado: type[BaseModel]) -> BaseModel:
             f"o modelo devolveu {type(saida).__name__} em vez da saida estruturada"
         )
 
-    return saida
+    return _desmascarar_saida(saida, mascarador)
 
 
 def _responder(estado: EstadoTurno) -> EstadoTurno:
@@ -202,7 +241,9 @@ def _responder(estado: EstadoTurno) -> EstadoTurno:
         ),
     ]
 
-    return {"saida": _invocar(_modelo(), mensagens, SaidaLia)}
+    return {
+        "saida": _invocar(_modelo(), mensagens, SaidaLia, estado["mascarador"])
+    }
 
 
 def _pontuar(estado: EstadoTurno) -> EstadoTurno:
@@ -225,10 +266,12 @@ def _consultar(estado: EstadoTurno) -> EstadoTurno:
     )
 
     try:
+        texto = indice_imoveis.texto_da_consulta(requisicao.mensagem, perfil)
         resultados = indice_imoveis.atual().buscar(
-            indice_imoveis.texto_da_consulta(requisicao.mensagem, perfil),
+            texto,
             k=IMOVEIS_POR_SUGESTAO,
             filtro=filtro,
+            mascarador=estado["mascarador"],
         )
     except IndiceIndisponivelError as erro:
         logger.warning(
@@ -272,7 +315,12 @@ def _apresentar(estado: EstadoTurno) -> EstadoTurno:
     ]
 
     try:
-        apresentacao = _invocar(_modelo_apresentacao(), mensagens, SaidaApresentacao)
+        apresentacao = _invocar(
+            _modelo_apresentacao(),
+            mensagens,
+            SaidaApresentacao,
+            estado["mascarador"],
+        )
     except LiaIndisponivelError as erro:
         logger.warning(
             "Apresentacao de imoveis da conversa %s falhou (cota=%s): %s",
@@ -425,7 +473,9 @@ def _slot_escolhido(saida: SaidaLia, agenda: list[SlotOferecido]) -> int | None:
 
 
 def responder(requisicao: TurnoRequest) -> TurnoResponse:
-    estado = _grafo().invoke({"requisicao": requisicao})
+    estado = _grafo().invoke(
+        {"requisicao": requisicao, "mascarador": MascaradorPII()}
+    )
     saida: SaidaLia = estado["saida"]
     apresentacao: SaidaApresentacao | None = estado.get("apresentacao")
     imoveis = _sugeridos(estado.get("resultados"), apresentacao)

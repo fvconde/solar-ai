@@ -15,6 +15,7 @@ from pathlib import Path
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from app.contrato import LIMITE_IMOVEIS, Intencao, PerfilLead
+from app.lia.mascaramento import MascaradorPII
 
 logger = logging.getLogger("solar.lia")
 
@@ -252,13 +253,15 @@ class Indice:
         texto: str,
         k: int = LIMITE_IMOVEIS,
         filtro: Filtro | None = None,
+        mascarador: MascaradorPII | None = None,
     ) -> list[Resultado]:
         """Ordena por similaridade os imoveis que o filtro aceita.
 
         Lista vazia significa que a base nao tem o que o lead pediu -- e um fato
         para a Lia dizer, nunca para ela trocar por um imovel qualquer.
         """
-        consulta = _normalizar(_chamar(self.embutidor.consulta, texto))
+        texto_seguro = (mascarador or MascaradorPII()).mascarar(texto)
+        consulta = _normalizar(_chamar(self.embutidor.consulta, texto_seguro))
 
         if len(consulta) != self.dimensao:
             raise IndiceIndisponivelError(
