@@ -1,6 +1,8 @@
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from app.contrato import MensagemHistorico, PerfilLead, TurnoRequest
@@ -116,3 +118,33 @@ def test_endpoint_turn_sem_header_nao_aciona_reengajamento_mesmo_com_mensagem_se
         assert mock_invocar.call_count == 1
         chamada_mensagens = mock_invocar.call_args[0][1]
         assert any("Mensagem do lead agora" in m.content for m in chamada_mensagens if hasattr(m, "content"))
+
+
+@pytest.mark.llm
+def test_reengajamento_live_com_gemini(ritmo):
+    conversa_id = uuid4()
+    perfil = PerfilLead(
+        nome="Lucas",
+        regiao="Tatuape",
+        preco_max=500000,
+        intencao="compra",
+    )
+    historico = [
+        MensagemHistorico(papel="lead", texto="procuro um apto no Tatuape ate 500 mil", em="2026-09-11T10:00:00Z"),
+        MensagemHistorico(papel="agente", texto="Tatuapé é uma boa região nessa faixa. Quantos quartos prefere?", em="2026-09-11T10:00:05Z"),
+    ]
+    requisicao = TurnoRequest(
+        conversa_id=conversa_id,
+        mensagem="[reengajar]",
+        perfil_lead=perfil,
+        historico=historico,
+    )
+
+    resposta = responder(requisicao, reengajamento=True)
+
+    print(f"\n>>> MENSAGEM REAL GERADA PELA LIA: {resposta.resposta}")
+    assert resposta.proxima_acao in ("continuar_conversa", "sugerir_imoveis")
+    texto_baixo = resposta.resposta.lower()
+    assert "tatuap" in texto_baixo
+    assert "500" in texto_baixo
+
