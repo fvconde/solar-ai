@@ -102,6 +102,7 @@ class SaidaApresentacao(BaseModel):
 class EstadoTurno(TypedDict):
     requisicao: TurnoRequest
     mascarador: MascaradorPII
+    reengajamento: bool
     lacunas: tuple[Sinal, ...]
     desfecho: str | None
     agenda: list[SlotOferecido]
@@ -246,6 +247,27 @@ def _responder(estado: EstadoTurno) -> EstadoTurno:
     }
 
 
+def _reengajar(estado: EstadoTurno) -> EstadoTurno:
+    requisicao = estado["requisicao"]
+
+    mensagens = [
+        SystemMessage(content=prompts.persona()),
+        HumanMessage(
+            content=prompts.reengajamento(
+                requisicao.perfil_lead,
+                requisicao.historico,
+            )
+        ),
+    ]
+
+    return {
+        "saida": _invocar(_modelo(), mensagens, SaidaLia, estado["mascarador"]),
+        "lacunas": (),
+        "desfecho": None,
+        "agenda": [],
+    }
+
+
 def _pontuar(estado: EstadoTurno) -> EstadoTurno:
     requisicao = estado["requisicao"]
     saida = estado["saida"]
@@ -373,6 +395,10 @@ def _apos_consultar(estado: EstadoTurno) -> str:
     return END if estado["resultados"] is None else "apresentar"
 
 
+def _rotear_inicio(estado: EstadoTurno) -> str:
+    return "reengajar" if estado.get("reengajamento") else "qualificar"
+
+
 @lru_cache(maxsize=1)
 def _grafo():
     grafo = StateGraph(EstadoTurno)
@@ -382,10 +408,14 @@ def _grafo():
     grafo.add_node("pontuar", _pontuar)
     grafo.add_node("consultar", _consultar)
     grafo.add_node("apresentar", _apresentar)
-    grafo.add_edge(START, "qualificar")
+    grafo.add_node("reengajar", _reengajar)
+    grafo.add_conditional_edges(
+        START, _rotear_inicio, {"qualificar": "qualificar", "reengajar": "reengajar"}
+    )
     grafo.add_edge("qualificar", "agendar")
     grafo.add_edge("agendar", "responder")
     grafo.add_edge("responder", "pontuar")
+    grafo.add_edge("reengajar", "pontuar")
     grafo.add_conditional_edges("pontuar", _apos_pontuar, {"consultar": "consultar", END: END})
     grafo.add_conditional_edges(
         "consultar", _apos_consultar, {"apresentar": "apresentar", END: END}
@@ -472,9 +502,13 @@ def _slot_escolhido(saida: SaidaLia, agenda: list[SlotOferecido]) -> int | None:
     return saida.slot_escolhido if saida.slot_escolhido in oferecidos else None
 
 
-def responder(requisicao: TurnoRequest) -> TurnoResponse:
+def responder(requisicao: TurnoRequest, reengajamento: bool = False) -> TurnoResponse:
     estado = _grafo().invoke(
-        {"requisicao": requisicao, "mascarador": MascaradorPII()}
+        {
+            "requisicao": requisicao,
+            "mascarador": MascaradorPII(),
+            "reengajamento": reengajamento,
+        }
     )
     saida: SaidaLia = estado["saida"]
     apresentacao: SaidaApresentacao | None = estado.get("apresentacao")
@@ -489,8 +523,8 @@ def responder(requisicao: TurnoRequest) -> TurnoResponse:
         proxima_acao=_proxima_acao(
             saida,
             imoveis,
-            estado["lacunas"],
-            estado["desfecho"],
+            estado.get("lacunas", ()),
+            estado.get("desfecho"),
         ),
         imoveis_sugeridos=imoveis,
         slot_escolhido=_slot_escolhido(saida, requisicao.agenda),

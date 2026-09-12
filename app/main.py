@@ -9,9 +9,9 @@ precisar de banco para responder, a arquitetura quebrou antes do teste.
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, Header, HTTPException, Response
 from pydantic import BaseModel
 
 from app.contrato import TurnoRequest, TurnoResponse
@@ -174,10 +174,13 @@ def health(response: Response) -> HealthResponse:
     response_model=TurnoResponse,
     responses={503: {"description": "a Lia nao conseguiu responder este turno"}},
 )
-def turn(requisicao: TurnoRequest) -> TurnoResponse:
+def turn(
+    requisicao: TurnoRequest,
+    x_solar_trigger: Annotated[str | None, Header(alias="X-Solar-Trigger")] = None,
+) -> TurnoResponse:
     """Processa um turno de conversa pelo grafo da Lia."""
     try:
-        return responder(requisicao)
+        return responder(requisicao, reengajamento=(x_solar_trigger == "follow-up"))
     except LiaIndisponivelError as erro:
         logger.error(
             "Turno da conversa %s falhou (cota=%s): %s",
