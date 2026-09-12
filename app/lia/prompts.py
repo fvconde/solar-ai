@@ -247,3 +247,14 @@ def apresentacao(
         .replace("{mensagem}", mensagem)
         .replace("{imoveis}", _imoveis(resultados, filtro))
     )
+
+
+def reengajamento(
+    perfil: PerfilLead,
+    historico: list[MensagemHistorico],
+) -> str:
+    return (
+        _ler("reengajamento.md")
+        .replace("{perfil}", _perfil(perfil))
+        .replace("{historico}", _historico(historico))
+    )
