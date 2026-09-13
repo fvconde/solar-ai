@@ -3,7 +3,7 @@
 from datetime import timedelta, timezone
 from pathlib import Path
 
-from app.contrato import MensagemHistorico, PerfilLead, SlotOferecido
+from app.contrato import ImovelSugerido, MensagemHistorico, PerfilLead, SlotOferecido
 from app.lia.indice import Filtro, Resultado
 from app.lia.qualificacao import Sinal
 
@@ -257,4 +257,30 @@ def reengajamento(
         _ler("reengajamento.md")
         .replace("{perfil}", _perfil(perfil))
         .replace("{historico}", _historico(historico))
+    )
+
+
+def _imoveis_mostrados(imoveis: list[ImovelSugerido]) -> str:
+    if not imoveis:
+        return "## Imoveis mostrados\n\nNenhum imovel foi mostrado nesta conversa."
+
+    linhas = "\n".join(
+        "- "
+        f"{imovel.id}: {imovel.tipo} em {imovel.bairro}, {imovel.quartos} quartos, "
+        f"{imovel.metragem} m2, motivo: {imovel.motivo}"
+        for imovel in imoveis
+    )
+    return f"## Imoveis mostrados\n\n{linhas}"
+
+
+def resumo(
+    perfil: PerfilLead,
+    historico: list[MensagemHistorico],
+    imoveis: list[ImovelSugerido],
+) -> str:
+    return (
+        _ler("resumo.md")
+        .replace("{perfil}", _perfil(perfil))
+        .replace("{historico}", _historico(historico))
+        .replace("{imoveis}", _imoveis_mostrados(imoveis))
     )
