@@ -97,3 +97,20 @@ class TurnoResponse(_Contrato):
     proxima_acao: ProximaAcao
     imoveis_sugeridos: list[ImovelSugerido] = Field(default_factory=list, max_length=LIMITE_IMOVEIS)
     slot_escolhido: int | None = None
+
+
+class ResumoRequest(_Contrato):
+    perfil_lead: PerfilLead
+    historico: list[MensagemHistorico] = Field(
+        min_length=1,
+        max_length=LIMITE_HISTORICO,
+    )
+    imoveis: list[ImovelSugerido] = Field(max_length=LIMITE_IMOVEIS)
+
+
+class ResumoResponse(_Contrato):
+    perfil: str | None
+    orcamento: str | None
+    imoveis: str | None
+    objecoes: str | None
+    proximo_passo: str | None
