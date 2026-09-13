@@ -1,19 +1,22 @@
 """Grafo da Lia.
 
-Seis nos e uma chamada ao LLM no turno comum: `qualificar` calcula as lacunas,
-`agendar` injeta a agenda recebida no prompt, `responder` conversa com o Gemini
-e `pontuar` aplica a regua do score.
+Oito nos com supervisor central deterministico na entrada do turno:
+`supervisor` avalia a natureza do turno (custo zero de LLM, sem modelo) e roteia
+para o especialista adequado: `qualificador`, `consultor`, `agendador` ou `reengajador`.
 
-Quando o proprio modelo diz que e hora de mostrar opcoes, o turno segue por mais
-dois nos: `consultar` busca no indice com o perfil ja fundido -- e por isso a
-busca do S-15 vem depois do LLM, e nao antes: o filtro duro precisa do que o lead
-acabou de dizer -- e `apresentar` gasta uma segunda chamada para escrever a fala
-com os imoveis na mao. Turno que sugere custa 2 chamadas e 1 embedding; turno
-comum continua custando 1 chamada e nenhum embedding.
+Exatamente TRES nos chamam o LLM no grafo: `responder`, `reengajar` e `apresentar`.
+Os nos `supervisor`, `qualificador`, `agendar`, `consultar` e `pontuar` sao funcoes
+puras e deterministicas.
+
+O custo por turno se mantem inalterado: 1 chamada no turno comum (qualificador comum,
+agendador, reengajador ou consultor direto) e 2 chamadas no turno que atinge a regua
+e sugere imoveis (qualificador com sugestao).
 """
 
 import logging
 import os
+import re
+import unicodedata
 from functools import lru_cache
 from typing import TypedDict, cast
 
@@ -99,10 +102,11 @@ class SaidaApresentacao(BaseModel):
     motivos: list[MotivoDoImovel] = Field(default_factory=list)
 
 
-class EstadoTurno(TypedDict):
+class EstadoTurno(TypedDict, total=False):
     requisicao: TurnoRequest
     mascarador: MascaradorPII
     reengajamento: bool
+    rota: str
     lacunas: tuple[Sinal, ...]
     desfecho: str | None
     agenda: list[SlotOferecido]
@@ -163,12 +167,17 @@ def _qualificar(estado: EstadoTurno) -> EstadoTurno:
     return {
         "lacunas": qualificacao.lacunas(perfil),
         "desfecho": qualificacao.desfecho_da_trilha(perfil),
+        "agenda": [],
     }
 
 
 def _agendar(estado: EstadoTurno) -> EstadoTurno:
     """No puro: leva ao prompt apenas os horarios recebidos da API dona do banco."""
-    return {"agenda": estado["requisicao"].agenda}
+    return {
+        "agenda": estado["requisicao"].agenda,
+        "lacunas": (),
+        "desfecho": None,
+    }
 
 
 def _mensagens_mascaradas(
@@ -235,9 +244,9 @@ def _responder(estado: EstadoTurno) -> EstadoTurno:
                 requisicao.perfil_lead,
                 requisicao.historico,
                 requisicao.mensagem,
-                estado["lacunas"],
-                estado["desfecho"],
-                estado["agenda"],
+                estado.get("lacunas", ()),
+                estado.get("desfecho"),
+                estado.get("agenda", []),
             )
         ),
     ]
@@ -282,10 +291,22 @@ def _pontuar(estado: EstadoTurno) -> EstadoTurno:
 def _consultar(estado: EstadoTurno) -> EstadoTurno:
     """Busca no indice com o perfil ja fundido. Indice fora do ar nao derruba o turno."""
     requisicao = estado["requisicao"]
-    perfil = estado["perfil"]
+    perfil = estado.get("perfil") or requisicao.perfil_lead
     filtro = Filtro.do_perfil(
         perfil, indice_imoveis.tipo_pedido(requisicao.mensagem, requisicao.historico)
     )
+
+    resultado_dict: EstadoTurno = {"filtro": filtro, "perfil": perfil}
+    if estado.get("score") is None:
+        resultado_dict["score"] = qualificacao.pontuar(perfil)
+    if estado.get("saida") is None:
+        resultado_dict["saida"] = SaidaLia(
+            resposta="Separei algumas opcoes de imoveis para voce.",
+            intencao=perfil.intencao or "indefinida",
+            campos_extraidos=CamposExtraidosLLM(),
+            proxima_acao="sugerir_imoveis",
+            slot_escolhido=None,
+        )
 
     try:
         texto = indice_imoveis.texto_da_consulta(requisicao.mensagem, perfil)
@@ -301,7 +322,8 @@ def _consultar(estado: EstadoTurno) -> EstadoTurno:
             requisicao.conversa_id,
             erro,
         )
-        return {"filtro": filtro, "resultados": None}
+        resultado_dict["resultados"] = None
+        return resultado_dict
 
     # Nunca logar o texto da consulta: ele carrega a mensagem do lead.
     logger.info(
@@ -311,7 +333,8 @@ def _consultar(estado: EstadoTurno) -> EstadoTurno:
         [resultado.imovel.id for resultado in resultados],
     )
 
-    return {"filtro": filtro, "resultados": resultados}
+    resultado_dict["resultados"] = resultados
+    return resultado_dict
 
 
 def _apresentar(estado: EstadoTurno) -> EstadoTurno:
@@ -372,18 +395,91 @@ def _fechou_os_essenciais_agora(estado: EstadoTurno) -> bool:
     return bool(antes) and not qualificacao.lacunas_essenciais(estado["perfil"])
 
 
+ROTA_REENGAJADOR = "reengajador"
+ROTA_AGENDADOR = "agendador"
+ROTA_CONSULTOR = "consultor"
+ROTA_QUALIFICADOR = "qualificador"
+
+ROTAS_ESPECIALISTAS = frozenset({
+    ROTA_REENGAJADOR,
+    ROTA_AGENDADOR,
+    ROTA_CONSULTOR,
+    ROTA_QUALIFICADOR,
+})
+
+_PALAVRAS_BUSCA = frozenset({
+    "buscar", "busca", "imoveis", "imovel", "opcoes", "opcao",
+    "mostrar", "mostra", "catalogo", "vitrine", "ver", "listar",
+    "disponivel", "disponiveis", "sugestoes", "sugestao",
+})
+
+
+def _e_consulta_imoveis(requisicao: TurnoRequest) -> bool:
+    msg = requisicao.mensagem.strip().lower()
+    if msg == "[consultar]":
+        return True
+
+    # Se o perfil ja tem essenciais preenchidos e a mensagem busca imoveis
+    if not qualificacao.lacunas_essenciais(requisicao.perfil_lead):
+        decomposto = unicodedata.normalize("NFKD", msg)
+        sem_acento = "".join(letra for letra in decomposto if not unicodedata.combining(letra))
+        palavras = set(re.findall(r"[a-z0-9]+", sem_acento))
+        if palavras & _PALAVRAS_BUSCA:
+            return True
+        if indice_imoveis.tipo_pedido(requisicao.mensagem, requisicao.historico) is not None:
+            return True
+
+    return False
+
+
+def _decidir_rota(estado: EstadoTurno) -> str:
+    if estado.get("reengajamento"):
+        return ROTA_REENGAJADOR
+
+    requisicao = estado["requisicao"]
+
+    if requisicao.agenda:
+        return ROTA_AGENDADOR
+
+    if _e_consulta_imoveis(requisicao):
+        return ROTA_CONSULTOR
+
+    return ROTA_QUALIFICADOR
+
+
+def _supervisor(estado: EstadoTurno) -> EstadoTurno:
+    """No supervisor deterministico: avalia a natureza do turno e roteia para o especialista.
+
+    Custo zero de LLM. Roteamento centralizado na entrada do turno e observavel no log.
+    """
+    rota = _decidir_rota(estado)
+    requisicao = estado["requisicao"]
+
+    logger.info(
+        "Supervisor roteou conversa %s para o no %s",
+        requisicao.conversa_id,
+        rota,
+    )
+
+    return {"rota": rota}
+
+
+def _rotear_supervisor(estado: EstadoTurno) -> str:
+    return estado["rota"]
+
+
 def _apos_pontuar(estado: EstadoTurno) -> str:
     proxima_acao = estado["saida"].proxima_acao
 
     if proxima_acao == GATILHO_DA_BUSCA:
-        return "consultar"
+        return "consultor"
 
     # Desfecho que o modelo declarou ganha da regua: encaminhar para gente de
     # verdade e encerrar sao decisoes da conversa, nao do perfil.
     if proxima_acao != "continuar_conversa":
         return END
 
-    return "consultar" if _fechou_os_essenciais_agora(estado) else END
+    return "consultor" if _fechou_os_essenciais_agora(estado) else END
 
 
 def _apos_consultar(estado: EstadoTurno) -> str:
@@ -392,33 +488,39 @@ def _apos_consultar(estado: EstadoTurno) -> str:
     `None` e outra coisa -- o indice nao respondeu, e a Lia nao pode afirmar que
     a base nao tem o que ela nunca chegou a procurar.
     """
-    return END if estado["resultados"] is None else "apresentar"
-
-
-def _rotear_inicio(estado: EstadoTurno) -> str:
-    return "reengajar" if estado.get("reengajamento") else "qualificar"
+    return END if estado.get("resultados") is None else "apresentar"
 
 
 @lru_cache(maxsize=1)
 def _grafo():
     grafo = StateGraph(EstadoTurno)
-    grafo.add_node("qualificar", _qualificar)
-    grafo.add_node("agendar", _agendar)
+    grafo.add_node("supervisor", _supervisor)
+    grafo.add_node("qualificador", _qualificar)
+    grafo.add_node("agendador", _agendar)
+    grafo.add_node("consultor", _consultar)
+    grafo.add_node("reengajador", _reengajar)
     grafo.add_node("responder", _responder)
     grafo.add_node("pontuar", _pontuar)
-    grafo.add_node("consultar", _consultar)
     grafo.add_node("apresentar", _apresentar)
-    grafo.add_node("reengajar", _reengajar)
+
+    grafo.add_edge(START, "supervisor")
     grafo.add_conditional_edges(
-        START, _rotear_inicio, {"qualificar": "qualificar", "reengajar": "reengajar"}
+        "supervisor",
+        _rotear_supervisor,
+        {
+            ROTA_REENGAJADOR: "reengajador",
+            ROTA_AGENDADOR: "agendador",
+            ROTA_CONSULTOR: "consultor",
+            ROTA_QUALIFICADOR: "qualificador",
+        },
     )
-    grafo.add_edge("qualificar", "agendar")
-    grafo.add_edge("agendar", "responder")
+    grafo.add_edge("qualificador", "responder")
+    grafo.add_edge("agendador", "responder")
     grafo.add_edge("responder", "pontuar")
-    grafo.add_edge("reengajar", "pontuar")
-    grafo.add_conditional_edges("pontuar", _apos_pontuar, {"consultar": "consultar", END: END})
+    grafo.add_edge("reengajador", "pontuar")
+    grafo.add_conditional_edges("pontuar", _apos_pontuar, {"consultor": "consultor", END: END})
     grafo.add_conditional_edges(
-        "consultar", _apos_consultar, {"apresentar": "apresentar", END: END}
+        "consultor", _apos_consultar, {"apresentar": "apresentar", END: END}
     )
     grafo.add_edge("apresentar", END)
 
