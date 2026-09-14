@@ -14,8 +14,8 @@ from typing import Annotated, Literal
 from fastapi import FastAPI, Header, HTTPException, Response
 from pydantic import BaseModel
 
-from app.contrato import TurnoRequest, TurnoResponse
-from app.lia import IndiceIndisponivelError, LiaIndisponivelError, responder
+from app.contrato import ResumoRequest, ResumoResponse, TurnoRequest, TurnoResponse
+from app.lia import IndiceIndisponivelError, LiaIndisponivelError, responder, resumir
 from app.lia import indice as indice_imoveis
 
 SERVICO = "solar-ai"
@@ -191,4 +191,21 @@ def turn(
         raise HTTPException(
             status_code=503,
             detail=_motivo(str(erro)) or "a Lia nao conseguiu responder este turno",
+        ) from erro
+
+
+@app.post(
+    "/resumo",
+    response_model=ResumoResponse,
+    responses={503: {"description": "a Lia nao conseguiu gerar o resumo"}},
+)
+def resumo(requisicao: ResumoRequest) -> ResumoResponse:
+    """Resume um encaminhamento sem acessar estado ou persistencia."""
+    try:
+        return resumir(requisicao)
+    except LiaIndisponivelError as erro:
+        logger.error("Resumo falhou (cota=%s): %s", erro.cota, erro)
+        raise HTTPException(
+            status_code=503,
+            detail=_motivo(str(erro)) or "a Lia nao conseguiu gerar o resumo",
         ) from erro

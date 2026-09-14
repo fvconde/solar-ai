@@ -33,6 +33,8 @@ from app.contrato import (
     Intencao,
     PerfilLead,
     ProximaAcao,
+    ResumoRequest,
+    ResumoResponse,
     SlotOferecido,
     TurnoRequest,
     TurnoResponse,
@@ -156,6 +158,11 @@ def _modelo_apresentacao():
     return _cliente().with_structured_output(SaidaApresentacao, method="json_schema")
 
 
+@lru_cache(maxsize=1)
+def _modelo_resumo():
+    return _cliente().with_structured_output(ResumoResponse, method="json_schema")
+
+
 def _e_cota(texto: str) -> bool:
     minusculo = texto.lower()
     return any(marca in minusculo for marca in _MARCAS_DE_COTA)
@@ -217,6 +224,8 @@ def _invocar(
     mensagens: list[BaseMessage],
     esperado: type[BaseModel],
     mascarador: MascaradorPII,
+    *,
+    restaurar_pii: bool = True,
 ) -> BaseModel:
     try:
         saida = modelo.invoke(_mensagens_mascaradas(mensagens, mascarador))
@@ -231,7 +240,7 @@ def _invocar(
             f"o modelo devolveu {type(saida).__name__} em vez da saida estruturada"
         )
 
-    return _desmascarar_saida(saida, mascarador)
+    return _desmascarar_saida(saida, mascarador) if restaurar_pii else saida
 
 
 def _responder(estado: EstadoTurno) -> EstadoTurno:
@@ -631,3 +640,24 @@ def responder(requisicao: TurnoRequest, reengajamento: bool = False) -> TurnoRes
         imoveis_sugeridos=imoveis,
         slot_escolhido=_slot_escolhido(saida, requisicao.agenda),
     )
+
+
+def resumir(requisicao: ResumoRequest) -> ResumoResponse:
+    """Gera as cinco secoes sem permitir que PII volte ao texto do resumo."""
+    mensagens = [
+        HumanMessage(
+            content=prompts.resumo(
+                requisicao.perfil_lead,
+                requisicao.historico,
+                requisicao.imoveis,
+            )
+        )
+    ]
+    saida = _invocar(
+        _modelo_resumo(),
+        mensagens,
+        ResumoResponse,
+        MascaradorPII(),
+        restaurar_pii=False,
+    )
+    return cast(ResumoResponse, saida)
