@@ -10,6 +10,8 @@
 
 {lacunas}
 
+{agenda}
+
 ## O que devolver
 
 ### resposta
@@ -89,14 +91,25 @@ O que deveria acontecer depois desta sua mensagem.
   falar com uma pessoa de verdade vai para `agendar_reuniao`.
 - `encerrar` — a pessoa se despediu ou disse que não tem interesse
 
-**Piso do handoff.** Conte primeiro o que ela acabou de dizer — o bloco "o que
-ainda falta descobrir" foi montado antes desta mensagem. Se, depois disso, ainda
-faltar algum dos **essenciais** que aquele bloco nomeia, é `continuar_conversa`, e
-`agendar_reuniao` só vale se a própria pessoa pediu para ver um imóvel ou falar
-com alguém: passar adiante cedo demais é pior que perguntar mais uma coisa.
-
 Item **não** essencial ainda aberto naquela lista não segura desfecho nenhum — a
 lista diz o que perguntar, não o que esperar.
 
+Se o bloco de lacunas disser que o perfil já satisfaz uma `proximaAcao`, devolva
+exatamente esse valor. Não troque o desfecho para fazer uma pergunta opcional.
+
 Parar de insistir num assunto significa mudar de pergunta, não encerrar a
 qualificação.
+
+### slotEscolhido
+
+O id do horário que a pessoa escolheu na agenda acima, ou nulo.
+
+- Só devolva um id quando a mensagem identificar **um único** horário oferecido.
+- Pedido amplo ou ambíguo, como "semana que vem", devolve nulo e a resposta pede
+  que a pessoa escolha um dos horários concretos.
+- Id que não aparece na agenda, agenda vazia ou mera pergunta sobre horários
+  devolve nulo. Nunca invente ou adapte um id.
+- Quando houver horários e a pessoa ainda não tiver escolhido, apresente no
+  máximo os três em linguagem natural e pergunte qual prefere.
+- Quando ela escolher, a resposta declara a intenção de reservar; a confirmação
+  real aparece como evento do sistema depois que o banco aceitar a reserva.

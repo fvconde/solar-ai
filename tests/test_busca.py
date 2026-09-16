@@ -7,10 +7,11 @@ injetado, entao o que se afirma e o comportamento do grafo, nao o do modelo.
 import json
 import math
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.contrato import PerfilLead, TurnoRequest
+from app.contrato import PerfilLead, SlotOferecido, TurnoRequest
 from app.lia import grafo, prompts
 from app.lia import indice as indice_imoveis
 from app.lia.grafo import (
@@ -127,9 +128,18 @@ def _apresentacao(*ids: str, resposta: str = "Separei estas tres.") -> SaidaApre
     )
 
 
-def _requisicao(mensagem: str = PEDIDO, **perfil) -> TurnoRequest:
+def _requisicao(
+    mensagem: str = PEDIDO,
+    agenda: list[SlotOferecido] | None = None,
+    **perfil,
+) -> TurnoRequest:
     return TurnoRequest.model_validate(
-        {"conversaId": CONVERSA, "mensagem": mensagem, "perfilLead": perfil}
+        {
+            "conversaId": CONVERSA,
+            "mensagem": mensagem,
+            "perfilLead": perfil,
+            "agenda": agenda or [],
+        }
     )
 
 
@@ -438,6 +448,70 @@ class TestGatilhoDaRegua:
 
         assert duble.chamadas == 1
         assert resposta.proxima_acao == "direcionar_especialista"
+
+    def test_regra_do_investidor_fechado_corrige_modelo_que_tenta_continuar(self, indice, dublar):
+        dublar(_saida(proximaAcao="continuar_conversa", camposExtraidos={}))
+
+        resposta = grafo.responder(
+            _requisicao(
+                "ainda nao, seria o primeiro",
+                intencao="investimento",
+                precoMax=400000,
+                expectativaRetorno="0,8% ao mes",
+            )
+        )
+
+        assert resposta.proxima_acao == "direcionar_especialista"
+
+
+class TestAgendaDoTurno:
+    @staticmethod
+    def _agenda() -> list[SlotOferecido]:
+        inicio = datetime(2026, 9, 10, 18, 0, tzinfo=timezone.utc)
+        return [SlotOferecido(id=42, inicio=inicio, fim=inicio + timedelta(hours=1))]
+
+    def test_id_oferecido_atravessa_o_gate(self, dublar):
+        dublar(
+            _saida(
+                proximaAcao="agendar_reuniao",
+                slotEscolhido=42,
+                camposExtraidos={},
+            )
+        )
+
+        resposta = grafo.responder(
+            _requisicao("quinta as tres", agenda=self._agenda(), **PERFIL_FECHADO)
+        )
+
+        assert resposta.slot_escolhido == 42
+
+    def test_id_inventado_e_descartado_pelo_gate(self, dublar):
+        dublar(
+            _saida(
+                proximaAcao="agendar_reuniao",
+                slotEscolhido=999,
+                camposExtraidos={},
+            )
+        )
+
+        resposta = grafo.responder(
+            _requisicao("quinta as tres", agenda=self._agenda(), **PERFIL_FECHADO)
+        )
+
+        assert resposta.slot_escolhido is None
+
+    def test_sem_agenda_nunca_devolve_id(self, dublar):
+        dublar(
+            _saida(
+                proximaAcao="agendar_reuniao",
+                slotEscolhido=42,
+                camposExtraidos={},
+            )
+        )
+
+        resposta = grafo.responder(_requisicao("quero marcar", **PERFIL_FECHADO))
+
+        assert resposta.slot_escolhido is None
 
 
 class TestBuscaDoTurno:

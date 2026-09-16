@@ -9,13 +9,13 @@ precisar de banco para responder, a arquitetura quebrou antes do teste.
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, Header, HTTPException, Response
 from pydantic import BaseModel
 
-from app.contrato import TurnoRequest, TurnoResponse
-from app.lia import IndiceIndisponivelError, LiaIndisponivelError, responder
+from app.contrato import ResumoRequest, ResumoResponse, TurnoRequest, TurnoResponse
+from app.lia import IndiceIndisponivelError, LiaIndisponivelError, responder, resumir
 from app.lia import indice as indice_imoveis
 
 SERVICO = "solar-ai"
@@ -174,10 +174,13 @@ def health(response: Response) -> HealthResponse:
     response_model=TurnoResponse,
     responses={503: {"description": "a Lia nao conseguiu responder este turno"}},
 )
-def turn(requisicao: TurnoRequest) -> TurnoResponse:
+def turn(
+    requisicao: TurnoRequest,
+    x_solar_trigger: Annotated[str | None, Header(alias="X-Solar-Trigger")] = None,
+) -> TurnoResponse:
     """Processa um turno de conversa pelo grafo da Lia."""
     try:
-        return responder(requisicao)
+        return responder(requisicao, reengajamento=(x_solar_trigger == "follow-up"))
     except LiaIndisponivelError as erro:
         logger.error(
             "Turno da conversa %s falhou (cota=%s): %s",
@@ -188,4 +191,21 @@ def turn(requisicao: TurnoRequest) -> TurnoResponse:
         raise HTTPException(
             status_code=503,
             detail=_motivo(str(erro)) or "a Lia nao conseguiu responder este turno",
+        ) from erro
+
+
+@app.post(
+    "/resumo",
+    response_model=ResumoResponse,
+    responses={503: {"description": "a Lia nao conseguiu gerar o resumo"}},
+)
+def resumo(requisicao: ResumoRequest) -> ResumoResponse:
+    """Resume um encaminhamento sem acessar estado ou persistencia."""
+    try:
+        return resumir(requisicao)
+    except LiaIndisponivelError as erro:
+        logger.error("Resumo falhou (cota=%s): %s", erro.cota, erro)
+        raise HTTPException(
+            status_code=503,
+            detail=_motivo(str(erro)) or "a Lia nao conseguiu gerar o resumo",
         ) from erro
