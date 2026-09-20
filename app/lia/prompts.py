@@ -54,12 +54,21 @@ def _historico(historico: list[MensagemHistorico]) -> str:
     if not historico:
         return "## Conversa ate agora\n\nEsta e a primeira mensagem da conversa."
 
-    linhas = "\n".join(
-        f"{'Lead' if mensagem.papel == 'lead' else 'Lia'}: {mensagem.texto}"
-        for mensagem in historico
-    )
+    linhas = []
+    for mensagem in historico:
+        linhas.append(f"{'Lead' if mensagem.papel == 'lead' else 'Lia'}: {mensagem.texto}")
+        if mensagem.imoveis_sugeridos:
+            opcoes = "; ".join(
+                f"{indice}. {imovel.id} — {imovel.bairro}"
+                for indice, imovel in enumerate(mensagem.imoveis_sugeridos, start=1)
+            )
+            linhas.append(
+                "  [Opções mostradas nesta fala, nesta ordem fixa: "
+                f"{opcoes}]"
+            )
 
-    return f"## Conversa ate agora\n\n{linhas}"
+    conversa = "\n".join(linhas)
+    return f"## Conversa ate agora\n\n{conversa}"
 
 
 TITULO = "## O que ainda falta descobrir"
@@ -136,6 +145,8 @@ def turno(
     lacunas: tuple[Sinal, ...] = (),
     desfecho: str | None = None,
     agenda: list[SlotOferecido] | None = None,
+    contato_informado: bool = False,
+    visita_confirmada: bool = False,
 ) -> str:
     return (
         _ler("turno.md")
@@ -144,6 +155,8 @@ def turno(
         .replace("{mensagem}", mensagem)
         .replace("{lacunas}", _lacunas(lacunas, desfecho))
         .replace("{agenda}", _agenda(agenda or []))
+        .replace("{contato}", "sim" if contato_informado else "não")
+        .replace("{visita}", "sim" if visita_confirmada else "não")
     )
 
 

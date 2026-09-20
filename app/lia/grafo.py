@@ -120,6 +120,196 @@ class EstadoTurno(TypedDict, total=False):
     apresentacao: SaidaApresentacao | None
 
 
+def _sem_acento(texto: str) -> str:
+    decomposto = unicodedata.normalize("NFKD", texto.lower())
+    return "".join(letra for letra in decomposto if not unicodedata.combining(letra))
+
+
+def _modalidade_mencionada(texto: str) -> Intencao | None:
+    normalizado = _sem_acento(texto)
+    aluguel = bool(re.search(r"\b(alug|locac|mensal|por mes)\w*", normalizado))
+    compra = bool(re.search(r"\b(compr|vend|aquisic)\w*", normalizado))
+
+    for numero, escala in re.findall(
+        r"\b(\d+(?:[.,]\d+)?)\s*(milhoes?|milhao|mil)\b", normalizado
+    ):
+        valor = float(numero.replace(",", "."))
+        if escala.startswith("milh"):
+            valor *= 1_000_000
+        elif escala.startswith("mil"):
+            valor *= 1_000
+        if valor >= 100_000:
+            compra = True
+
+    if aluguel and compra:
+        return "indefinida"
+    if aluguel:
+        return "aluguel"
+    if compra:
+        return "compra"
+    return None
+
+
+def _regiao_mencionada(texto: str) -> str | None:
+    normalizado = _sem_acento(texto)
+    match = re.search(r"\b(zona\s+(?:norte|sul|leste|oeste|central))\b", normalizado)
+    return match.group(1) if match else None
+
+
+def _orcamento_mencionado(texto: str) -> tuple[int | None, int | None]:
+    normalizado = _sem_acento(texto)
+    precos = re.findall(
+        r"\b(\d+(?:[.,]\d+)?)\s*(milhoes?|milhao|mil)\b", normalizado
+    )
+    if not precos:
+        return None, None
+
+    numero, escala = precos[-1]
+    valor = float(numero.replace(",", "."))
+    if escala.startswith("milh"):
+        valor *= 1_000_000
+    else:
+        valor *= 1_000
+    valor = int(valor)
+    inicio = normalizado.rfind(numero)
+    prefixo = normalizado[max(0, inicio - 24) : inicio]
+    if re.search(r"(a partir de|acima de|no minimo)\s*$", prefixo):
+        return valor, None
+    return None, valor
+
+
+def _preco_confirmado(requisicao: TurnoRequest) -> tuple[int | None, int | None]:
+    textos = [requisicao.mensagem]
+    textos.extend(
+        mensagem.texto
+        for mensagem in reversed(requisicao.historico)
+        if mensagem.papel == "lead"
+    )
+    for texto in textos:
+        minimo, maximo = _orcamento_mencionado(texto)
+        if minimo is not None or maximo is not None:
+            return minimo, maximo
+    return None, None
+
+
+def _aguarda_esclarecimento_modalidade(requisicao: TurnoRequest) -> bool:
+    for mensagem in reversed(requisicao.historico):
+        if mensagem.papel != "agente":
+            continue
+        texto = _sem_acento(mensagem.texto)
+        tem_modalidades = bool(re.search(r"\b(alug\w*|compr\w*)\b", texto))
+        tem_pergunta_de_valor = "mensal" in texto or "preco total" in texto
+        return (
+            "alugar ou comprar" in texto
+            or "aluguel ou compra" in texto
+            or (tem_modalidades and tem_pergunta_de_valor)
+        )
+    return False
+
+
+def _modalidade_resolvida(requisicao: TurnoRequest) -> Intencao | None:
+    if not _aguarda_esclarecimento_modalidade(requisicao):
+        return None
+    modalidade = _modalidade_mencionada(requisicao.mensagem)
+    return modalidade if modalidade in ("aluguel", "compra") else None
+
+
+def _conflito_modalidade(requisicao: TurnoRequest) -> bool:
+    atual = _modalidade_mencionada(requisicao.mensagem)
+    if _modalidade_resolvida(requisicao) is not None:
+        return False
+    if _aguarda_esclarecimento_modalidade(requisicao):
+        return True
+    if atual == "indefinida":
+        return True
+    if atual is None:
+        return False
+
+    anterior = requisicao.perfil_lead.intencao
+    if anterior in ("aluguel", "compra") and anterior != atual:
+        return True
+
+    for mensagem in reversed(requisicao.historico):
+        if mensagem.papel != "lead":
+            continue
+        mencionada = _modalidade_mencionada(mensagem.texto)
+        if mencionada == "indefinida":
+            return True
+        if mencionada in ("aluguel", "compra"):
+            return mencionada != atual
+    return False
+
+
+def _pergunta_depois_da_modalidade(perfil: PerfilLead) -> str:
+    perguntas = {
+        "regiao": "Em qual região ou bairro você está procurando?",
+        "preco": "Qual faixa de preço você tem em mente?",
+        "urgencia": "Quando você pretende se mudar ou decidir?",
+        "quartos": "De quantos quartos você precisa?",
+        "nome": "Como você se chama?",
+    }
+    lacunas = qualificacao.lacunas(perfil)
+    return perguntas.get(lacunas[0].campo, "O que mais você gostaria de considerar?") if lacunas else "Como posso ajudar você a avançar?"
+
+
+def _imovel_referenciado(requisicao: TurnoRequest) -> ImovelSugerido | None:
+    texto = _sem_acento(requisicao.mensagem)
+    ordinal = None
+    if re.search(r"\b(primeir\w*|1a|1o|opcao\s*(?:numero\s*)?1)\b", texto):
+        ordinal = 0
+    elif re.search(r"\b(segund\w*|2a|2o|opcao\s*(?:numero\s*)?2)\b", texto):
+        ordinal = 1
+    elif re.search(r"\b(terceir\w*|3a|3o|opcao\s*(?:numero\s*)?3)\b", texto):
+        ordinal = 2
+
+    if ordinal is None:
+        return None
+
+    for mensagem in reversed(requisicao.historico):
+        if mensagem.papel == "agente" and mensagem.imoveis_sugeridos:
+            return (
+                mensagem.imoveis_sugeridos[ordinal]
+                if ordinal < len(mensagem.imoveis_sugeridos)
+                else None
+            )
+    return None
+
+
+def _resposta_de_handoff(
+    saida: SaidaLia,
+    requisicao: TurnoRequest,
+    imovel: ImovelSugerido | None = None,
+) -> SaidaLia:
+    if imovel is not None:
+        if requisicao.agenda:
+            resposta = (
+                f"Vamos seguir com o imóvel de {imovel.bairro}. "
+                "Qual dos horários oferecidos funciona para você?"
+            )
+        else:
+            resposta = (
+                f"Vamos seguir com o imóvel de {imovel.bairro}. "
+                "Vou confirmar a visita com o corretor."
+            )
+        proxima_acao: ProximaAcao = "agendar_reuniao"
+    elif requisicao.visita_confirmada:
+        resposta = "Sua visita já está confirmada e o corretor dará continuidade ao atendimento."
+        proxima_acao = "agendar_reuniao"
+    elif saida.proxima_acao in ("agendar_reuniao", "direcionar_especialista"):
+        resposta = (
+            "Posso encaminhar sua conversa para um corretor."
+            if not requisicao.contato_informado
+            else saida.resposta
+        )
+        proxima_acao = saida.proxima_acao
+    else:
+        return saida
+
+    if not requisicao.contato_informado and "informe seu telefone ou e-mail" not in resposta:
+        resposta += " Para o corretor entrar em contato, informe seu telefone ou e-mail."
+    return saida.model_copy(update={"resposta": resposta, "proxima_acao": proxima_acao})
+
+
 def _temperatura() -> dict[str, float]:
     bruto = os.getenv("GEMINI_TEMPERATURE", "").strip()
 
@@ -256,6 +446,8 @@ def _responder(estado: EstadoTurno) -> EstadoTurno:
                 estado.get("lacunas", ()),
                 estado.get("desfecho"),
                 estado.get("agenda", []),
+                requisicao.contato_informado,
+                requisicao.visita_confirmada,
             )
         ),
     ]
@@ -289,12 +481,79 @@ def _reengajar(estado: EstadoTurno) -> EstadoTurno:
 def _pontuar(estado: EstadoTurno) -> EstadoTurno:
     requisicao = estado["requisicao"]
     saida = estado["saida"]
+    modalidade_resolvida = _modalidade_resolvida(requisicao)
+
+    if modalidade_resolvida is not None:
+        campos = saida.campos_extraidos
+        preco_min, preco_max = _preco_confirmado(requisicao)
+        if preco_min is not None or preco_max is not None:
+            campos = campos.model_copy(
+                update={"preco_min": preco_min, "preco_max": preco_max}
+            )
+        perfil = qualificacao.fundir(
+            requisicao.perfil_lead,
+            modalidade_resolvida,
+            campos,
+        )
+        saida = saida.model_copy(
+            update={
+                "resposta": (
+                    f"Entendi, vamos considerar {modalidade_resolvida}. "
+                    f"{_pergunta_depois_da_modalidade(perfil)}"
+                ),
+                "intencao": modalidade_resolvida,
+                "campos_extraidos": campos,
+                "proxima_acao": "continuar_conversa",
+                "slot_escolhido": None,
+            }
+        )
+        return {
+            "saida": saida,
+            "perfil": perfil,
+            "score": qualificacao.pontuar(perfil),
+        }
+
+    if _conflito_modalidade(requisicao):
+        campos = saida.campos_extraidos
+        regiao = _regiao_mencionada(requisicao.mensagem)
+        if regiao is not None:
+            campos = campos.model_copy(update={"regiao": regiao})
+        campos = campos.model_copy(update={"preco_min": None, "preco_max": None})
+        saida = saida.model_copy(
+            update={
+                "resposta": (
+                    "Entendi que você falou em aluguel e agora mencionou um valor "
+                    "de compra. Você quer alugar ou comprar? Esse valor é mensal "
+                    "ou o preço total do imóvel?"
+                ),
+                "intencao": "indefinida",
+                "campos_extraidos": campos,
+                "proxima_acao": "continuar_conversa",
+                "slot_escolhido": None,
+            }
+        )
+        return {
+            "saida": saida,
+            "perfil": requisicao.perfil_lead,
+            "score": qualificacao.pontuar(requisicao.perfil_lead),
+        }
+
+    imovel = _imovel_referenciado(requisicao)
+    if imovel is not None or requisicao.visita_confirmada:
+        saida = _resposta_de_handoff(saida, requisicao, imovel)
 
     perfil = qualificacao.fundir(
         requisicao.perfil_lead, saida.intencao, saida.campos_extraidos
     )
 
-    return {"perfil": perfil, "score": qualificacao.pontuar(perfil)}
+    if (
+        imovel is None
+        and not requisicao.visita_confirmada
+        and saida.proxima_acao in ("agendar_reuniao", "direcionar_especialista")
+    ):
+        saida = _resposta_de_handoff(saida, requisicao)
+
+    return {"saida": saida, "perfil": perfil, "score": qualificacao.pontuar(perfil)}
 
 
 def _consultar(estado: EstadoTurno) -> EstadoTurno:
@@ -447,6 +706,13 @@ def _decidir_rota(estado: EstadoTurno) -> str:
 
     requisicao = estado["requisicao"]
 
+    if (
+        requisicao.visita_confirmada
+        or _imovel_referenciado(requisicao) is not None
+        or _conflito_modalidade(requisicao)
+    ):
+        return ROTA_AGENDADOR if requisicao.agenda else ROTA_QUALIFICADOR
+
     if requisicao.agenda:
         return ROTA_AGENDADOR
 
@@ -478,6 +744,14 @@ def _rotear_supervisor(estado: EstadoTurno) -> str:
 
 
 def _apos_pontuar(estado: EstadoTurno) -> str:
+    requisicao = estado["requisicao"]
+    if (
+        _conflito_modalidade(requisicao)
+        or requisicao.visita_confirmada
+        or _imovel_referenciado(requisicao) is not None
+    ):
+        return END
+
     proxima_acao = estado["saida"].proxima_acao
 
     if proxima_acao == GATILHO_DA_BUSCA:
