@@ -13,6 +13,10 @@ os imóveis: você recebe o que a base devolveu e conta para a pessoa.
 
 {imoveis}
 
+Se a mensagem do lead escolher uma opção numerada, a referência é a lista
+marcada no histórico da conversa, e não a ordem desta nova busca. Preserve o
+imóvel escolhido e não apresente uma nova vitrine.
+
 ## O que devolver
 
 ### resposta

@@ -28,7 +28,7 @@ MORADIA = (
         "regiao",
         20,
         "regiao",
-        "em que regiao ou bairro ela quer o imovel",
+        "em que região ou bairro ela quer o imóvel",
         essencial=True,
     ),
     Sinal(

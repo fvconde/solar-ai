@@ -4,6 +4,8 @@ Espelhado em solar-ai-api/src/Solar.Api/Contracts/ContratoTurno.cs.
 Mudanca aqui exige commit coordenado nos dois repositorios.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -36,6 +38,10 @@ class MensagemHistorico(_Contrato):
     papel: Papel
     texto: str
     em: datetime
+    # Snapshot das opcoes mostradas naquela fala. Nao contem dados pessoais e
+    # permite resolver referencias como "a primeira opcao" sem confiar na
+    # ordem de uma busca posterior.
+    imoveis_sugeridos: list[ImovelSugerido] | None = None
 
 
 class PerfilLead(_Contrato):
@@ -88,6 +94,8 @@ class TurnoRequest(_Contrato):
     historico: list[MensagemHistorico] = Field(default_factory=list, max_length=LIMITE_HISTORICO)
     perfil_lead: PerfilLead = Field(default_factory=PerfilLead)
     agenda: list[SlotOferecido] = Field(default_factory=list)
+    contato_informado: bool = False
+    visita_confirmada: bool = False
 
 
 class TurnoResponse(_Contrato):
