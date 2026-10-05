@@ -898,6 +898,9 @@ def responder(requisicao: TurnoRequest, reengajamento: bool = False) -> TurnoRes
     saida: SaidaLia = estado["saida"]
     apresentacao: SaidaApresentacao | None = estado.get("apresentacao")
     imoveis = _sugeridos(estado.get("resultados"), apresentacao)
+    perfil_fundido = qualificacao.fundir(
+        requisicao.perfil_lead, saida.intencao, saida.campos_extraidos
+    )
 
     return TurnoResponse(
         resposta=apresentacao.resposta if apresentacao else saida.resposta,
@@ -913,6 +916,7 @@ def responder(requisicao: TurnoRequest, reengajamento: bool = False) -> TurnoRes
         ),
         imoveis_sugeridos=imoveis,
         slot_escolhido=_slot_escolhido(saida, requisicao.agenda),
+        essenciais_completos=not qualificacao.lacunas_essenciais(perfil_fundido),
     )
 
 
