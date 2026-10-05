@@ -105,6 +105,8 @@ class TurnoResponse(_Contrato):
     proxima_acao: ProximaAcao
     imoveis_sugeridos: list[ImovelSugerido] = Field(default_factory=list, max_length=LIMITE_IMOVEIS)
     slot_escolhido: int | None = None
+    essenciais_completos: bool
+
 
 
 class ResumoRequest(_Contrato):
