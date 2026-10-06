@@ -1,5 +1,9 @@
 # solar-ai
 
+[![CI](https://github.com/fvconde/solar-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/fvconde/solar-ai/actions/workflows/ci.yml)
+
+> *Nota sobre o badge de CI*: O badge reflete o status das execuções do workflow no GitHub Actions na branch padrão. Antes da integração da branch `feature/S-28` em `develop`/`main` e do primeiro disparo no repositório remoto, o badge poderá exibir status pendente ou não encontrado.
+
 > **Camada Cognitiva e Agente Conversacional Lia**  
 > Para a visão geral do sistema Solar, governança de privacidade de dados, regras de negócio e diagrama de arquitetura completo, consulte o **[README Hub do Solar](https://github.com/fvconde/solar-ai-docs)**.
 
