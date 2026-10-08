@@ -293,7 +293,7 @@ def _resposta_de_handoff(
             )
         proxima_acao: ProximaAcao = "agendar_reuniao"
     elif requisicao.visita_confirmada:
-        resposta = "Sua visita já está confirmada e o corretor dará continuidade ao atendimento."
+        resposta = "Sua reunião já está confirmada e o corretor dará continuidade ao atendimento."
         proxima_acao = "agendar_reuniao"
     elif saida.proxima_acao in ("agendar_reuniao", "direcionar_especialista"):
         resposta = (
