@@ -235,11 +235,15 @@ def test_visita_confirmada_bloqueia_nova_vitrine(ambiente):
             mensagem="tem mais algum?",
             perfil_lead=PerfilLead(intencao="compra", regiao="zona sul", preco_max=600000),
             visita_confirmada=True,
+            contato_informado=True,
         )
     )
 
     assert resposta.proxima_acao == "agendar_reuniao"
-    assert "confirmada" in resposta.resposta
+    assert (
+        resposta.resposta
+        == "Sua reunião já está confirmada e o corretor dará continuidade ao atendimento."
+    )
     assert resposta.imoveis_sugeridos == []
     indice.buscar.assert_not_called()
 
