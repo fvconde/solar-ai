@@ -4,9 +4,9 @@
 # ele precisa: por decisao de arquitetura ele e stateless e nunca acessa o
 # banco. E o que o pipeline de CI/CD deste repositorio (S-28) vai usar.
 #
-# O ambiente completo dos tres servicos e montado pelo solar-ai-docs, que
-# inclui este arquivo. Sem `name:` de proposito: assim o projeto Compose e o de
-# quem inclui, e os servicos entram todos na mesma rede.
+# O ambiente completo (Postgres + API + agente) e montado pelo compose.yml do
+# solar-ai-api, que inclui este arquivo. Sem `name:` de proposito: assim o
+# projeto Compose e o de quem inclui, e os servicos entram todos na mesma rede.
 
 services:
   agente:
