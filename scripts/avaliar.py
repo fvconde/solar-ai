@@ -15,8 +15,11 @@ Duas partes:
   Mede acerto@5, recall@5 e MRR do indice vetorial, sem filtro de perfil: o que
   se avalia aqui e so a similaridade dos embeddings.
 
-O resultado vai para o terminal e para avaliacao/resultado.md, que entra no git
-para o README poder citar os numeros da ultima rodada.
+O resultado vai para o terminal e para avaliacao/resultado.md. Quando as duas
+partes rodam, as tabelas tambem substituem o bloco entre os marcadores
+<!-- avaliacao:inicio --> e <!-- avaliacao:fim --> do README. O workflow
+.github/workflows/avaliacao.yml roda este script no GitHub com a chave guardada
+em secret e abre um PR com os dois arquivos.
 
 Uso:
     python scripts/avaliar.py                  # as duas partes
@@ -40,6 +43,9 @@ from datetime import datetime, timezone
 
 RAIZ = pathlib.Path(__file__).resolve().parents[1]
 SAIDA = RAIZ / "avaliacao" / "resultado.md"
+README = RAIZ / "README.md"
+MARCA_INICIO = "<!-- avaliacao:inicio -->"
+MARCA_FIM = "<!-- avaliacao:fim -->"
 PAUSA_ENTRE_CHAMADAS = 5.0
 PAUSA_ENTRE_EMBEDDINGS = 0.7
 K = 5
@@ -145,7 +151,7 @@ def _carregar_env() -> None:
             os.environ[nome] = valor
 
 
-def _avaliar_extracao() -> list[str]:
+def _avaliar_extracao() -> tuple[list[str], list[str]]:
     from app.lia import responder
     from tests.test_extracao import CASOS, falhas
 
@@ -171,10 +177,8 @@ def _avaliar_extracao() -> list[str]:
         print(f"   {numero:2}/{len(CASOS)} {marca:5} {caso.nome}", flush=True)
 
     taxa = acertos / len(CASOS)
-    linhas = [
-        "## Extracao de campos e intencao",
-        "",
-        f"Modelo: `{os.environ.get('GEMINI_MODEL', '?')}`",
+    tabela = [
+        f"**Extracao** (modelo `{os.environ.get('GEMINI_MODEL', '?')}`)",
         "",
         "| Metrica | Valor |",
         "| --- | --- |",
@@ -183,13 +187,13 @@ def _avaliar_extracao() -> list[str]:
         f"| Latencia p95 do turno | {percentil(latencias, 0.95):.0f} ms |",
         "",
     ]
-    linhas += ["Casos errados:", "", *erros, ""] if erros else ["Nenhum caso errado.", ""]
+    detalhe = ["Casos errados:", "", *erros, ""] if erros else ["Nenhum caso errado.", ""]
 
     print(f"   -> {acertos}/{len(CASOS)} certos ({taxa:.0%})")
-    return linhas
+    return tabela, detalhe
 
 
-def _avaliar_busca() -> list[str]:
+def _avaliar_busca() -> tuple[list[str], list[str]]:
     from app.lia import indice as indice_imoveis
 
     indice = indice_imoveis.construir()
@@ -224,11 +228,9 @@ def _avaliar_busca() -> list[str]:
         print(f"   {numero:2}/{len(CONSULTAS_BUSCA)} {marca:5} {consulta.texto}", flush=True)
 
     total = len(CONSULTAS_BUSCA)
-    linhas = [
-        "## Busca de imoveis (RAG)",
-        "",
-        f"Embedding: `{indice.modelo}` · acervo de {len(acervo)} imoveis · "
-        f"{total} consultas rotuladas",
+    tabela = [
+        f"**Busca (RAG)** (embedding `{indice.modelo}`, acervo de {len(acervo)} imoveis, "
+        f"{total} consultas rotuladas)",
         "",
         "| Metrica | Valor |",
         "| --- | --- |",
@@ -237,14 +239,25 @@ def _avaliar_busca() -> list[str]:
         f"| MRR (posicao do primeiro certo) | {sum(reciprocos) / total:.2f} |",
         "",
     ]
-    linhas += (
+    detalhe = (
         [f"Consultas sem nenhum certo no top {K}:", "", *erros, ""]
         if erros
         else [f"Todas as consultas trouxeram um imovel certo no top {K}.", ""]
     )
 
     print(f"   -> acerto@{K} {sum(acertos) / total:.0%}, MRR {sum(reciprocos) / total:.2f}")
-    return linhas
+    return tabela, detalhe
+
+
+def com_bloco_trocado(texto: str, bloco: str) -> str:
+    """O texto com o conteudo entre MARCA_INICIO e MARCA_FIM trocado por `bloco`."""
+    inicio = texto.find(MARCA_INICIO)
+    fim = texto.find(MARCA_FIM)
+    if inicio < 0 or fim < inicio:
+        raise ValueError(f"marcadores {MARCA_INICIO} e {MARCA_FIM} ausentes ou fora de ordem")
+
+    antes = texto[: inicio + len(MARCA_INICIO)]
+    return f"{antes}\n{bloco.strip()}\n{texto[fim:]}"
 
 
 def main() -> int:
@@ -258,7 +271,9 @@ def main() -> int:
         return 2
 
     agora = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    linhas = ["# Avaliacao da Lia", "", f"Rodada de {agora} com `python scripts/avaliar.py`.", ""]
+    rodada = f"Rodada de {agora} com `python scripts/avaliar.py`."
+    linhas = ["# Avaliacao da Lia", "", rodada, ""]
+    tabelas: list[str] = []
 
     partes = [("extracao", _avaliar_extracao), ("busca", _avaliar_busca)]
     for nome, avaliar in partes:
@@ -266,16 +281,25 @@ def main() -> int:
             continue
         print(f"-> {nome}...", flush=True)
         try:
-            linhas += avaliar()
+            tabela, detalhe = avaliar()
         except Exception as erro:
             print(f"   FALHOU: {type(erro).__name__}: {erro}")
             if "429" in str(erro) or "RESOURCE_EXHAUSTED" in str(erro):
                 print("   Isso e cota do free tier, nao bug no codigo. Tente mais tarde.")
             return 1
+        linhas += [*tabela, *detalhe]
+        tabelas += tabela
 
     SAIDA.parent.mkdir(exist_ok=True)
     SAIDA.write_text("\n".join(linhas), encoding="utf-8")
     print(f"\nResultado em {SAIDA.relative_to(RAIZ)}")
+
+    # Com uma parte so, o README ficaria com metade dos numeros de outra rodada.
+    if not args.so:
+        bloco = "\n".join([rodada, "", *tabelas])
+        texto = com_bloco_trocado(README.read_text(encoding="utf-8"), bloco)
+        README.write_text(texto, encoding="utf-8")
+        print("README atualizado")
 
     return 0
 

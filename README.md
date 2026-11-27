@@ -74,7 +74,13 @@ python scripts/avaliar.py --so extracao   # só a extração
 - **Extração:** os 27 casos de `tests/test_extracao.py`, julgados pela mesma régua do teste, viram taxa de acerto, com latência média e p95 do turno.
 - **Busca:** 21 pedidos de lead em texto livre, cada um rotulado com os imóveis certos do acervo, viram acerto@5, recall@5 e MRR do índice vetorial.
 
-O resultado da última rodada fica em [`avaliacao/resultado.md`](avaliacao/resultado.md). Uma rodada completa gasta cerca de 27 chamadas de geração e 21 embeddings da cota do Gemini.
+Uma rodada completa gasta cerca de 27 chamadas de geração e 21 embeddings da cota do Gemini. O detalhe de cada caso errado fica em [`avaliacao/resultado.md`](avaliacao/resultado.md), e as tabelas abaixo são trocadas a cada rodada completa:
+
+<!-- avaliacao:inicio -->
+Ainda sem rodada publicada.
+<!-- avaliacao:fim -->
+
+Para rodar no GitHub sem chave na máquina, cadastre o secret `GEMINI_API_KEY` em **Settings > Secrets and variables > Actions** e dispare o workflow **Avaliação** em **Actions**. Ele roda o script e abre um PR com o resultado e o README atualizados.
 
 ---
 

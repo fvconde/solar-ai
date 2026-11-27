@@ -16,7 +16,10 @@ from app.lia import qualificacao
 from scripts.avaliar import (
     CONSULTAS_BUSCA,
     K,
+    MARCA_FIM,
+    MARCA_INICIO,
     acerto_em_k,
+    com_bloco_trocado,
     percentil,
     reciproco_da_posicao,
     recall_em_k,
@@ -137,3 +140,23 @@ def test_falhas_respeita_campo_esperado_ausente() -> None:
 
 def nome_numerico(nome: str) -> bool:
     return CamposExtraidos.model_fields[nome].annotation not in (str, str | None)
+
+
+def test_bloco_do_readme_troca_so_o_que_esta_entre_os_marcadores() -> None:
+    texto = f"antes\n{MARCA_INICIO}\nvelho\n{MARCA_FIM}\ndepois\n"
+
+    novo = com_bloco_trocado(texto, "\nnovo\n")
+
+    assert novo == f"antes\n{MARCA_INICIO}\nnovo\n{MARCA_FIM}\ndepois\n"
+    assert com_bloco_trocado(novo, "novo") == novo
+
+
+def test_bloco_do_readme_sem_marcadores_e_erro() -> None:
+    with pytest.raises(ValueError):
+        com_bloco_trocado(f"{MARCA_FIM}\n{MARCA_INICIO}", "x")
+
+
+def test_readme_tem_os_marcadores_da_avaliacao() -> None:
+    texto = (RAIZ / "README.md").read_text(encoding="utf-8")
+    assert texto.count(MARCA_INICIO) == 1 and texto.count(MARCA_FIM) == 1
+    com_bloco_trocado(texto, "x")
