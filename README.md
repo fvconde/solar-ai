@@ -77,7 +77,23 @@ python scripts/avaliar.py --so extracao   # só a extração
 Uma rodada completa gasta cerca de 27 chamadas de geração e 21 embeddings da cota do Gemini. O detalhe de cada caso errado fica em [`avaliacao/resultado.md`](avaliacao/resultado.md), e as tabelas abaixo são trocadas a cada rodada completa:
 
 <!-- avaliacao:inicio -->
-Ainda sem rodada publicada.
+Rodada de 2026-11-27 05:46 UTC com `python scripts/avaliar.py`.
+
+**Extracao** (modelo `gemini-3.5-flash-lite`)
+
+| Metrica | Valor |
+| --- | --- |
+| Casos certos | 25 de 27 (93%) |
+| Latencia media do turno | 808 ms |
+| Latencia p95 do turno | 920 ms |
+
+**Busca (RAG)** (embedding `gemini-embedding-001`, acervo de 80 imoveis, 21 consultas rotuladas)
+
+| Metrica | Valor |
+| --- | --- |
+| Acerto@5 (algum imovel certo no top 5) | 100% |
+| Recall@5 (fracao dos certos no top 5) | 0.95 |
+| MRR (posicao do primeiro certo) | 0.92 |
 <!-- avaliacao:fim -->
 
 Para rodar no GitHub sem chave na máquina, cadastre o secret `GEMINI_API_KEY` em **Settings > Secrets and variables > Actions** e dispare o workflow **Avaliação** em **Actions**. Ele roda o script e abre um PR com o resultado e o README atualizados.
