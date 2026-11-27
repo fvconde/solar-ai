@@ -61,6 +61,21 @@ pytest            # testes determinísticos, sem chamar o Gemini
 pytest -m llm     # testes que chamam o Gemini de verdade (gastam cota)
 ```
 
+### Avaliação em números
+
+Os testes dizem passou ou falhou. A avaliação diz **quanto** a Lia acerta:
+
+```bash
+python scripts/avaliar.py                 # extração e busca
+python scripts/avaliar.py --so busca      # só a busca (RAG)
+python scripts/avaliar.py --so extracao   # só a extração
+```
+
+- **Extração:** os 27 casos de `tests/test_extracao.py`, julgados pela mesma régua do teste, viram taxa de acerto, com latência média e p95 do turno.
+- **Busca:** 21 pedidos de lead em texto livre, cada um rotulado com os imóveis certos do acervo, viram acerto@5, recall@5 e MRR do índice vetorial.
+
+O resultado da última rodada fica em [`avaliacao/resultado.md`](avaliacao/resultado.md). Uma rodada completa gasta cerca de 27 chamadas de geração e 21 embeddings da cota do Gemini.
+
 ---
 
 ## Como funciona
