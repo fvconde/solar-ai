@@ -333,25 +333,33 @@ def _igual(obtido, esperado) -> bool:
     return obtido == esperado
 
 
-@pytest.mark.llm
-@pytest.mark.parametrize("caso", CASOS, ids=lambda caso: caso.nome)
-def test_extrai_so_o_que_o_lead_disse(caso: Caso, ritmo) -> None:
-    resposta = responder(caso.requisicao())
+def falhas(caso: Caso, resposta) -> list[str]:
+    """Tudo o que a resposta errou neste caso; lista vazia e acerto.
+
+    Fica fora do teste para o scripts/avaliar.py contar acertos com o mesmo juizo,
+    em vez de parar na primeira assercao.
+    """
     campos = resposta.campos_extraidos.model_dump()
+    erros: list[str] = []
 
-    if caso.intencao is not None:
-        assert resposta.intencao == caso.intencao, f"resposta da Lia: {resposta.resposta}"
+    if caso.intencao is not None and resposta.intencao != caso.intencao:
+        erros.append(f"intencao: esperava {caso.intencao!r}, veio {resposta.intencao!r}")
 
-    if caso.proxima_acao is not None:
-        assert resposta.proxima_acao == caso.proxima_acao, f"resposta da Lia: {resposta.resposta}"
+    if caso.proxima_acao is not None and resposta.proxima_acao != caso.proxima_acao:
+        erros.append(
+            f"proxima_acao: esperava {caso.proxima_acao!r}, veio {resposta.proxima_acao!r}"
+        )
 
     for nome, esperado in caso.extrai.items():
-        assert _igual(campos[nome], esperado), f"{nome}: esperava {esperado!r}, veio {campos[nome]!r}"
+        if not _igual(campos[nome], esperado):
+            erros.append(f"{nome}: esperava {esperado!r}, veio {campos[nome]!r}")
 
     for nome, trecho in caso.contem.items():
         obtido = campos[nome]
-        assert obtido is not None, f"{nome}: esperava conter {trecho!r}, veio nulo"
-        assert trecho.casefold() in obtido.casefold(), f"{nome}: {obtido!r} nao contem {trecho!r}"
+        if obtido is None:
+            erros.append(f"{nome}: esperava conter {trecho!r}, veio nulo")
+        elif trecho.casefold() not in obtido.casefold():
+            erros.append(f"{nome}: {obtido!r} nao contem {trecho!r}")
 
     permitidos = caso.permitidos()
     inventados = {
@@ -360,13 +368,25 @@ def test_extrai_so_o_que_o_lead_disse(caso: Caso, ritmo) -> None:
         if valor is not None and nome not in permitidos
     }
 
-    assert not inventados, f"campos que ninguem mencionou: {inventados}"
+    if inventados:
+        erros.append(f"campos que ninguem mencionou: {inventados}")
 
     perfil = qualificacao.fundir(
         caso.requisicao().perfil_lead, resposta.intencao, resposta.campos_extraidos
     )
 
-    assert campos["score"] == qualificacao.pontuar(perfil), "o score nao veio da regua"
+    if campos["score"] != qualificacao.pontuar(perfil):
+        erros.append("o score nao veio da regua")
+
+    return erros
+
+
+@pytest.mark.llm
+@pytest.mark.parametrize("caso", CASOS, ids=lambda caso: caso.nome)
+def test_extrai_so_o_que_o_lead_disse(caso: Caso, ritmo) -> None:
+    resposta = responder(caso.requisicao())
+
+    assert not falhas(caso, resposta), f"resposta da Lia: {resposta.resposta}"
 
 
 def test_todo_campo_do_contrato_tem_ao_menos_um_caso() -> None:
