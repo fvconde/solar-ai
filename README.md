@@ -65,25 +65,37 @@ pytest -m llm     # testes que chamam o Gemini de verdade (gastam cota)
 
 ## Como funciona
 
-O turno é um grafo LangGraph (`app/lia/grafo.py`):
+O turno é um grafo LangGraph (`app/lia/grafo.py`). Na entrada fica um **supervisor determinístico**: ele olha o turno e, por regras, sem chamar o modelo, escolhe o agente especialista que vai tratá-lo.
 
 ```mermaid
 flowchart LR
-    qualificar --> agendar --> responder --> pontuar
-    pontuar -->|precisa sugerir imóveis| consultar
+    inicio([turno]) --> supervisor{supervisor}
+    supervisor -->|follow-up| reengajador
+    supervisor -->|API enviou horários| agendador
+    supervisor -->|pedido de imóveis com perfil completo| consultor
+    supervisor -->|demais turnos| qualificador
+    qualificador --> responder
+    agendador --> responder
+    responder --> pontuar
+    reengajador --> pontuar
+    pontuar -->|precisa sugerir imóveis| consultor
     pontuar -->|senão| fim([fim])
-    consultar -->|achou imóveis| apresentar --> fim
-    consultar -->|nada| fim
+    consultor -->|índice respondeu| apresentar --> fim
+    consultor -->|índice fora do ar| fim
 ```
 
 | Nó | O que faz |
 |---|---|
-| `qualificar` | Compara o perfil com a régua de qualificação e lista o que falta perguntar |
-| `agendar` | Coloca no prompt os horários livres enviados pela API |
+| `supervisor` | Decide a rota do turno por regras: reengajamento, agendamento, consulta direta de imóveis ou qualificação. A rota escolhida vai para o log |
+| `qualificador` | Compara o perfil com a régua de qualificação e lista o que falta perguntar |
+| `agendador` | Coloca no prompt os horários livres enviados pela API |
+| `reengajador` | Chamada ao Gemini que retoma uma conversa parada (acionado quando a API manda `X-Solar-Trigger: follow-up`) |
 | `responder` | Chamada ao Gemini com saída estruturada: fala da Lia, campos extraídos, próxima ação |
-| `pontuar` | Recalcula o score (0–100) pela régua determinística |
-| `consultar` | Busca no acervo de 80 imóveis: filtros duros + similaridade por cosseno |
+| `pontuar` | Funde o perfil, recalcula o score (0–100) pela régua determinística e decide se é hora de sugerir imóveis |
+| `consultor` | Busca no acervo de 80 imóveis: filtros duros + similaridade por cosseno |
 | `apresentar` | Segunda chamada ao Gemini: apresenta os imóveis com o motivo de cada um |
+
+Só três nós chamam o Gemini (`responder`, `reengajador` e `apresentar`); os demais são funções determinísticas. Um turno comum custa uma chamada, e o turno que sugere imóveis depois de qualificar custa duas.
 
 Os embeddings do acervo ficam em cache em `data/embeddings.json`, então o boot não gasta cota. Se `data/imoveis.json` mudar, regenere com `python scripts/gerar_embeddings.py`.
 
